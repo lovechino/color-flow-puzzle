@@ -176,7 +176,9 @@ function generateByMutation(gridSize: number, levelCount: number, existingIndice
       const rate = attempt > 0 ? (attempt / ((Date.now() - bootstrapStartTime) / 1000)).toFixed(1) : '?';
       process.stdout.write(`\r  Bootstrap ${gridSize}×${gridSize}: attempt ${attempt}/${maxBootstraps} (${elapsed}s, ${rate}/sec)...`);
     }
-    seed = PuzzleGenerator.bootstrap(gridSize, minColors, 30, mechanics, 1);
+    
+    // Bootstrap does ONE attempt — the loop handles retries
+    seed = PuzzleGenerator.bootstrap(gridSize, minColors, 10 + (attempt % 30), [], attempt);
     
     // Strict validation: seed must have pairs AND solution
     if (seed && Array.isArray(seed.pairs) && seed.pairs.length > 0 && 

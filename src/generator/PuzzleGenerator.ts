@@ -216,30 +216,54 @@ export class PuzzleGenerator {
     return null;
   }
 
-  // Bootstrap a level by trying many different seeds with progressive difficulty
-  static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): LevelData | null {
-    const generator = new PuzzleGenerator();
-    
-    // Keep target colors — optimize solver instead
-    // For large grids, increase attempts and use relaxed constraints
-    for (let i = 0; i < maxBootstraps; i++) {
-      const result = generator.generate({
-        gridSize,
-        numColors,
-        targetDifficulty: 10 + (i % 30), // Start easy, ramp up slowly
-        mechanics: [], // No mechanics for bootstrap
-        seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
-      });
-      
-      // Validate that result has required properties
-      if (result && Array.isArray(result.pairs) && result.pairs.length > 0 && 
-          Array.isArray(result.solution) && result.solution.length > 0) {
-        // Update to target parameters
-        result.difficultyScore = targetDifficulty;
-        return result;
-      }
-    }
-    return null;
+  // Bootstrap a single attempt — direct placeDots + solve, no retry loop
+  static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, _mechanics: Mechanic[], attemptIndex: number = 0): LevelData | null {
+    const scorer = new DifficultyScorer();
+    const validator = new UniquenessValidator();
+    const rng = new SeededRandom(`bootstrap_${gridSize}_${attemptIndex}_${Date.now()}`);
+
+    // Step 1: Place dots (one attempt only)
+    const pairs = placeDots(gridSize, numColors, rng, {
+      minManhattanDistance: gridSize === 3 ? 1 : Math.max(2, Math.floor(gridSize * 0.35)),
+      minColorSpread: 1,
+      avoidCorners: gridSize > 3,
+    });
+    if (!pairs) return null;
+
+    // Step 2: Solve (one attempt only)
+    const solver = new BacktrackingSolver();
+    const solution = solver.solve(gridSize, pairs, []);
+    if (!solution) return null;
+
+    // Step 3: Create LevelData
+    const level: LevelData = {
+      id: `g${String(gridSize).padStart(2, '0')}_bootstrap_${attemptIndex}`,
+      gridSize,
+      globalIndex: 0,
+      pairs,
+      walls: [],
+      mixers: [],
+      teleports: [],
+      locks: [],
+      shapeMask: undefined,
+      solution,
+      difficultyScore: 0,
+      difficultyLabel: 'trivial',
+      par: solution.reduce((sum, s) => sum + s.path.length, 0),
+      estimatedSolveTime: 0,
+      mechanics: [],
+    };
+
+    // Step 4: Quick validation
+    if (validator.countSolutions(level, 2) !== 1) return null;
+
+    // Step 5: Score difficulty
+    const score = scorer.score(level);
+    level.difficultyScore = score;
+    level.difficultyLabel = scorer.getLabel(score);
+    level.estimatedSolveTime = Math.round(level.par * 1.5 + score * 0.5);
+
+    return level;
   }
 
   // Mutate an existing level to create a new one
