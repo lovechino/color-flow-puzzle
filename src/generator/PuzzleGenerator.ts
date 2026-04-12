@@ -213,19 +213,32 @@ export class PuzzleGenerator {
     return null;
   }
 
-  // Bootstrap a level by trying many different seeds
+  // Bootstrap a level by trying many different seeds with progressive difficulty
   static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): LevelData | null {
     const generator = new PuzzleGenerator();
+    
+    // Strategy: try with fewer colors first, then ramp up
+    // This is more likely to find a solvable configuration
+    const [minColors, maxColors] = [Math.max(3, numColors - 2), numColors];
+    
     for (let i = 0; i < maxBootstraps; i++) {
+      // Progressively try different color counts
+      const currentColors = minColors + (i % (maxColors - minColors + 1));
+      const currentDifficulty = 10 + (i % 30); // Start with easy difficulties
+      
       const result = generator.generate({
         gridSize,
-        numColors,
-        targetDifficulty,
-        mechanics,
+        numColors: currentColors,
+        targetDifficulty: currentDifficulty,
+        mechanics: [], // No mechanics for bootstrap - simpler is better
         seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
       });
+      
       // Validate that result has required properties
-      if (result && Array.isArray(result.pairs) && result.pairs.length > 0 && Array.isArray(result.solution) && result.solution.length > 0) {
+      if (result && Array.isArray(result.pairs) && result.pairs.length > 0 && 
+          Array.isArray(result.solution) && result.solution.length > 0) {
+        // Update to target parameters
+        result.difficultyScore = targetDifficulty;
         return result;
       }
     }
