@@ -7,6 +7,88 @@ import { ConstraintPropagator } from './steps/ConstraintPropagator';
 import { MechanicsPlacer } from './steps/PlaceMechanics';
 import { DifficultyScorer } from './DifficultyScorer';
 import { createEmptyGrid, populateGridFromLevel } from '../game/GridLogic';
+import type { Color } from '../types';
+
+function mutateLevelInternal(seed: LevelData, rng: SeededRandom): LevelData | null {
+  const solver = new BacktrackingSolver();
+  const gridSize = seed.gridSize;
+
+  // Copy pairs and mutate positions
+  const pairs = seed.pairs.map(p => ({
+    color: p.color as Color,
+    start: [...p.start] as [number, number],
+    end: [...p.end] as [number, number]
+  }));
+
+  // Mutation strategies (randomly pick one)
+  const strategy = rng.nextInt(4);
+
+  if (strategy === 0 && pairs.length >= 2) {
+    // Swap positions between 2 random pairs
+    const i = rng.nextInt(pairs.length);
+    const j = (i + 1 + rng.nextInt(pairs.length - 1)) % pairs.length;
+    const swapDot = rng.nextInt(2);
+    if (swapDot === 0) {
+      const tmp = pairs[i].start;
+      pairs[i].start = pairs[j].start;
+      pairs[j].start = tmp;
+    } else {
+      const tmp = pairs[i].end;
+      pairs[i].end = pairs[j].end;
+      pairs[j].end = tmp;
+    }
+  } else if (strategy === 1) {
+    // Shift a random dot by 1 cell
+    const i = rng.nextInt(pairs.length);
+    const dotIdx = rng.nextInt(2);
+    const dot = dotIdx === 0 ? pairs[i].start : pairs[i].end;
+    const dir = rng.nextInt(4);
+    const dr = [0, 0, 1, -1][dir];
+    const dc = [1, -1, 0, 0][dir];
+    const nr = dot[0] + dr;
+    const nc = dot[1] + dc;
+
+    if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
+      const occupied = new Set<string>();
+      pairs.forEach((p, idx) => {
+        occupied.add(`${p.start[0]},${p.start[1]}`);
+        occupied.add(`${p.end[0]},${p.end[1]}`);
+      });
+
+      if (!occupied.has(`${nr},${nc}`)) {
+        if (dotIdx === 0) pairs[i].start = [nr, nc];
+        else pairs[i].end = [nr, nc];
+      }
+    }
+  } else if (strategy === 2 && pairs.length >= 2) {
+    // Swap colors of 2 random pairs
+    const i = rng.nextInt(pairs.length);
+    const j = (i + 1 + rng.nextInt(pairs.length - 1)) % pairs.length;
+    const tmp = pairs[i].color;
+    pairs[i].color = pairs[j].color;
+    pairs[j].color = tmp;
+  } else {
+    // Flip a pair's start/end
+    const i = rng.nextInt(pairs.length);
+    const tmp = pairs[i].start;
+    pairs[i].start = pairs[i].end;
+    pairs[i].end = tmp;
+  }
+
+  // Try to solve
+  const solution = solver.solve(gridSize, pairs, []);
+  if (!solution) return null;
+
+  return {
+    ...seed,
+    pairs,
+    solution,
+    difficultyScore: 0,
+    difficultyLabel: 'trivial',
+    par: 0,
+    estimatedSolveTime: 0,
+  };
+}
 
 export interface GeneratorConfig {
   gridSize: number;
@@ -124,7 +206,49 @@ export class PuzzleGenerator {
       return fullLevel;
     }
 
-    console.error(`[PG] All 30 attempts failed, returning null`);
+    console.error(`[PG] All ${maxAttempts} attempts failed, returning null`);
+    return null;
+  }
+
+  // Bootstrap a level by trying many different seeds
+  static async bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): Promise<LevelData | null> {
+    const generator = new PuzzleGenerator();
+    for (let i = 0; i < maxBootstraps; i++) {
+      const result = generator.generate({
+        gridSize,
+        numColors,
+        targetDifficulty,
+        mechanics,
+        seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
+      });
+      if (result) return result;
+    }
+    return null;
+  }
+
+  // Mutate an existing level to create a new one
+  static mutate(seed: LevelData, mutationCount: number, difficultyTarget: number): LevelData | null {
+    const maxRetries = 100;
+    const rng = new SeededRandom(`mutate_${seed.id}_${mutationCount}_${Date.now()}`);
+    const scorer = new DifficultyScorer();
+    const validator = new UniquenessValidator();
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const mutated = mutateLevelInternal(seed, rng);
+      if (!mutated) continue;
+
+      // Validate uniqueness
+      if (validator.countSolutions(mutated, 2) !== 1) continue;
+
+      // Score difficulty
+      const score = scorer.score(mutated);
+      mutated.difficultyScore = score;
+      mutated.difficultyLabel = scorer.getLabel(score);
+      mutated.par = mutated.solution.reduce((sum, s) => sum + s.path.length, 0);
+      mutated.estimatedSolveTime = Math.round(mutated.par * 1.5 + score * 0.5);
+
+      return mutated;
+    }
     return null;
   }
 

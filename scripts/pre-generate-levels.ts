@@ -1,305 +1,301 @@
 /**
  * Pre-generation script for all puzzle levels (3×3 - 20×20)
  * 
- * This script generates all levels OFFLINE and saves them as JSON files.
- * Runtime will only load these pre-generated levels - NO runtime generation.
- * 
- * Features:
- * - Resumable: Can be interrupted and resumed from where it left off
- * - Progress tracking: Shows ETA and completion percentage
- * - Timeout handling: Skips levels that take too long
- * - Validation: Validates each level after generation
+ * Strategy:
+ * - Grids 3x3 - 6x6: Random placement (works fine)
+ * - Grids 7x7 - 20x20: Mutation-based (random placement fails for large grids)
  * 
  * Usage:
  *   npx tsx scripts/pre-generate-levels.ts              # Generate all
  *   npx tsx scripts/pre-generate-levels.ts --grid 6     # Generate only 6×6
- *   npx tsx scripts/pre-generate-levels.ts --start 10   # Resume from level 10
  */
 
 import { PuzzleGenerator } from '../src/generator/PuzzleGenerator';
 import { DifficultyScorer } from '../src/generator/DifficultyScorer';
 import type { LevelData, Mechanic } from '../src/types';
-import { 
-  LEVEL_COUNTS_BY_GRID, 
-  COLOR_RANGE_BY_GRID, 
-  MECHANIC_UNLOCK_GRID 
-} from '../src/config';
+import { LEVEL_COUNTS_BY_GRID, COLOR_RANGE_BY_GRID, MECHANIC_UNLOCK_GRID } from '../src/config';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const OUTPUT_DIR = join(process.cwd(), 'src', 'levels');
 
-// ─── Configuration ────────────────────────────────────────────────────────────
+// ─── Generation stats ─────────────────────────────────────────────────────────
 
+interface GridStats { total: number; generated: number; failed: number; timeMs: number; }
 interface GenerationStats {
   totalLevels: number;
   generatedLevels: number;
   failedLevels: number;
   startTime: number;
-  gridStats: Record<number, { total: number; generated: number; failed: number; timeMs: number }>;
+  gridStats: Record<number, GridStats>;
 }
-
-// ─── Helper Functions ─────────────────────────────────────────────────────────
-
-function getAllowedMechanics(gridSize: number): Mechanic[] {
-  const allowed: Mechanic[] = [];
-  for (const [mech, unlockGrid] of Object.entries(MECHANIC_UNLOCK_GRID)) {
-    if (gridSize >= unlockGrid) allowed.push(mech as Mechanic);
-  }
-  return allowed;
-}
-
-function getTargetDifficultyRange(gridSize: number): [number, number] {
-  // Spread difficulties evenly across the spectrum
-  // Small grids: focus on easy-medium
-  // Large grids: include hard-expert
-  if (gridSize <= 5) return [10, 40];   // trivial-medium
-  if (gridSize <= 8) return [20, 60];   // easy-hard
-  if (gridSize <= 12) return [30, 75];  // medium-expert
-  if (gridSize <= 16) return [40, 85];  // hard-master
-  return [50, 95];                       // expert-legendary
-}
-
-function getNumColorsForDifficulty(gridSize: number, targetDiff: number): number {
-  const [minColors, maxColors] = COLOR_RANGE_BY_GRID[gridSize];
-  const range = maxColors - minColors;
-  const normalizedDiff = (targetDiff - 10) / 85; // 0-1
-  return minColors + Math.floor(normalizedDiff * range);
-}
-
-function createLevelId(gridSize: number, index: number): string {
-  return `g${String(gridSize).padStart(2, '0')}_${String(index).padStart(3, '0')}`;
-}
-
-// ─── Level Generation with Retry Logic ────────────────────────────────────────
-
-function generateSingleLevel(
-  gridSize: number,
-  levelIndex: number,
-  targetDifficulty: number
-): LevelData | null {
-  const maxRetries = 50;
-  const numColors = getNumColorsForDifficulty(gridSize, targetDifficulty);
-  const mechanics = getAllowedMechanics(gridSize);
-
-  const generator = new PuzzleGenerator();
-  const scorer = new DifficultyScorer();
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const seed = `${createLevelId(gridSize, levelIndex)}_attempt${attempt}`;
-
-    const level = generator.generate({
-      gridSize,
-      numColors,
-      targetDifficulty,
-      mechanics,
-      seed
-    });
-
-    if (!level) continue;
-
-    // NOTE: generator.generate() already validates uniqueness (countSolutions === 1)
-    // No need to validate again here — that was the bug causing 40+ minute hangs!
-
-    // Score difficulty
-    const score = scorer.score(level);
-    level.difficultyScore = score;
-    level.difficultyLabel = scorer.getLabel(score);
-    level.par = level.solution.reduce((sum, s) => sum + s.path.length, 0);
-    level.estimatedSolveTime = Math.round(level.par * 1.5 + score * 0.5);
-    level.id = createLevelId(gridSize, levelIndex);
-    level.globalIndex = levelIndex;
-
-    // Check if difficulty is within acceptable range
-    const maxDiff = gridSize <= 5 ? 100 : 20;
-    if (Math.abs(score - targetDifficulty) > maxDiff) continue;
-
-    return level;
-  }
-
-  return null;
-}
-
-// ─── Progress Tracking ────────────────────────────────────────────────────────
 
 function loadStats(): GenerationStats | null {
   const statsPath = join(OUTPUT_DIR, 'generation-stats.json');
   if (!existsSync(statsPath)) return null;
-  
-  try {
-    return JSON.parse(readFileSync(statsPath, 'utf8'));
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(readFileSync(statsPath, 'utf8')); } catch { return null; }
 }
 
 function saveStats(stats: GenerationStats): void {
-  const statsPath = join(OUTPUT_DIR, 'generation-stats.json');
-  writeFileSync(statsPath, JSON.stringify(stats, null, 2), 'utf8');
+  writeFileSync(join(OUTPUT_DIR, 'generation-stats.json'), JSON.stringify(stats, null, 2), 'utf8');
 }
 
-function saveLevel(level: LevelData): void {
-  const gridDir = join(OUTPUT_DIR, `grid_${String(level.gridSize).padStart(2, '0')}`);
-  if (!existsSync(gridDir)) mkdirSync(gridDir, { recursive: true });
-  
-  const filePath = join(gridDir, `${level.id}.json`);
-  writeFileSync(filePath, JSON.stringify(level, null, 2), 'utf8');
+function formatTime(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  const min = Math.floor(sec / 60);
+  const hr = Math.floor(min / 60);
+  if (hr > 0) return `${hr}h ${min % 60}m`;
+  if (min > 0) return `${min}m ${sec % 60}s`;
+  return `${sec}s`;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getAllowedMechanics(gridSize: number): Mechanic[] {
+  return Object.entries(MECHANIC_UNLOCK_GRID)
+    .filter(([, unlockGrid]) => gridSize >= (unlockGrid as number))
+    .map(([mech]) => mech as Mechanic);
+}
+
+function getTargetDifficultyRange(gridSize: number): [number, number] {
+  if (gridSize <= 5) return [10, 40];
+  if (gridSize <= 8) return [20, 60];
+  if (gridSize <= 12) return [30, 75];
+  if (gridSize <= 16) return [40, 85];
+  return [50, 95];
 }
 
 function loadExistingLevels(gridSize: number): Set<number> {
   const gridDir = join(OUTPUT_DIR, `grid_${String(gridSize).padStart(2, '0')}`);
   if (!existsSync(gridDir)) return new Set();
-  
   try {
     const files = readdirSync(gridDir).filter(f => f.endsWith('.json'));
     const indices = new Set<number>();
-    
     for (const file of files) {
       const match = file.match(/g\d+_(\d+)\.json/);
-      if (match) {
-        indices.add(parseInt(match[1], 10));
-      }
+      if (match) indices.add(parseInt(match[1], 10));
     }
-    
     return indices;
-  } catch {
-    return new Set();
-  }
+  } catch { return new Set(); }
 }
 
-// ─── Main Generation Logic ────────────────────────────────────────────────────
+// ─── Random generation (for 3x3 - 6x6) ───────────────────────────────────────
 
-function formatTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-  return `${seconds}s`;
-}
-
-function generateForGridSize(
-  gridSize: number, 
-  stats: GenerationStats
-): void {
-  const levelCount = LEVEL_COUNTS_BY_GRID[gridSize];
-  const existingLevels = loadExistingLevels(gridSize);
-  
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`Generating ${levelCount} levels for ${gridSize}×${gridSize}...`);
-  console.log(`Already exists: ${existingLevels.size} levels`);
-  console.log(`${'='.repeat(60)}`);
+function generateByRandom(gridSize: number, levelCount: number, existingIndices: Set<number>, stats: GenerationStats): void {
+  const gridDir = join(OUTPUT_DIR, `grid_${String(gridSize).padStart(2, '0')}`);
+  if (!existsSync(gridDir)) mkdirSync(gridDir, { recursive: true });
 
   if (!stats.gridStats[gridSize]) {
     stats.gridStats[gridSize] = { total: levelCount, generated: 0, failed: 0, timeMs: 0 };
   }
-
   const gridStats = stats.gridStats[gridSize];
   const gridStart = Date.now();
+  const generator = new PuzzleGenerator();
+  const scorer = new DifficultyScorer();
+  const [minDiff, maxDiff] = getTargetDifficultyRange(gridSize);
+  const [minColors, maxColors] = COLOR_RANGE_BY_GRID[gridSize];
+  const mechanics = getAllowedMechanics(gridSize);
 
-  for (let i = 1; i <= levelCount; i++) {
-    // Skip existing levels
-    if (existingLevels.has(i)) {
-      console.log(`  [${i}/${levelCount}] ⏭️  Skipped (exists)`);
-      continue;
-    }
+  let generated = existingIndices.size;
+  let nextIndex = 1;
+  while (existingIndices.has(nextIndex)) nextIndex;
 
-    // Target difficulty: spread across range
-    const [minDiff, maxDiff] = getTargetDifficultyRange(gridSize);
-    const targetDifficulty = minDiff + Math.floor((i / levelCount) * (maxDiff - minDiff));
+  while (generated < levelCount) {
+    const targetDifficulty = minDiff + Math.floor((nextIndex / levelCount) * (maxDiff - minDiff));
+    const numColors = minColors + Math.floor(((targetDifficulty - 10) / 85) * (maxColors - minColors));
+    const seed = `g${String(gridSize).padStart(2, '0')}_${String(nextIndex).padStart(3, '0')}`;
 
-    console.log(`  [${i}/${levelCount}] 🎯 Target difficulty: ${targetDifficulty}...`);
+    console.log(`  [${nextIndex}/${levelCount}] 🎯 Target difficulty: ${targetDifficulty}...`);
     const levelStart = Date.now();
-    
-    const level = generateSingleLevel(gridSize, i, targetDifficulty);
-    const levelTime = Date.now() - levelStart;
+
+    const level = generator.generate({ gridSize, numColors, targetDifficulty, mechanics, seed });
 
     if (level) {
-      saveLevel(level);
+      const score = scorer.score(level);
+      level.difficultyScore = score;
+      level.difficultyLabel = scorer.getLabel(score);
+      level.par = level.solution.reduce((sum, s) => sum + s.path.length, 0);
+      level.estimatedSolveTime = Math.round(level.par * 1.5 + score * 0.5);
+      level.id = seed;
+      level.globalIndex = nextIndex;
+
+      writeFileSync(join(gridDir, `${level.id}.json`), JSON.stringify(level, null, 2), 'utf8');
+      existingIndices.add(nextIndex);
       gridStats.generated++;
       stats.generatedLevels++;
-      console.log(`  [${i}/${levelCount}] ✅ Created in ${formatTime(levelTime)} (score: ${level.difficultyScore}, ${level.difficultyLabel})`);
+      generated++;
+      nextIndex++;
+      console.log(`  ✅ ${seed} in ${((Date.now() - levelStart) / 1000).toFixed(0)}s (score: ${score})`);
     } else {
       gridStats.failed++;
       stats.failedLevels++;
-      console.log(`  [${i}/${levelCount}] ❌ Failed after ${formatTime(levelTime)}`);
+      console.log(`  ❌ Failed after ${((Date.now() - levelStart) / 60000).toFixed(1)}min`);
     }
 
-    gridStats.timeMs += levelTime;
-    stats.totalLevels = Object.values(stats.gridStats).reduce((sum, g) => sum + g.total, 0);
-    stats.generatedLevels = Object.values(stats.gridStats).reduce((sum, g) => sum + g.generated, 0);
-
-    // Save progress after each level
+    gridStats.timeMs = Date.now() - gridStart;
     saveStats(stats);
-
-    // ETA
-    const elapsed = Date.now() - stats.startTime;
-    const rate = elapsed / stats.generatedLevels;
-    const remaining = (stats.totalLevels - stats.generatedLevels) * rate;
-    console.log(`       📊 Progress: ${((stats.generatedLevels / stats.totalLevels) * 100).toFixed(1)}% | ETA: ${formatTime(remaining)}`);
   }
 
-  gridStats.timeMs = Date.now() - gridStart;
-  console.log(`\n✅ Grid ${gridSize}×${gridSize} complete: ${gridStats.generated}/${levelCount} levels in ${formatTime(gridStats.timeMs)}`);
+  console.log(`\n✅ Grid ${gridSize}x${gridSize}: ${gridStats.generated}/${levelCount} in ${formatTime(gridStats.timeMs)}`);
 }
 
-function generateAllLevels(targetGrids?: number[]): void {
-  const grids = targetGrids || Object.keys(LEVEL_COUNTS_BY_GRID).map(Number).sort((a, b) => a - b);
-  
-  console.log('🚀 Pre-generating puzzle levels');
-  console.log(`   Grids: ${grids.join(', ')}`);
-  console.log(`   Output: ${OUTPUT_DIR}\n`);
+// ─── Mutation generation (for 7x7 - 20x20) ────────────────────────────────────
 
-  // Load or create stats
-  let stats = loadStats();
-  if (!stats) {
-    stats = {
-      totalLevels: 0,
-      generatedLevels: 0,
-      failedLevels: 0,
-      startTime: Date.now(),
-      gridStats: {}
-    };
+function generateByMutation(gridSize: number, levelCount: number, existingIndices: Set<number>, stats: GenerationStats): void {
+  const gridDir = join(OUTPUT_DIR, `grid_${String(gridSize).padStart(2, '0')}`);
+  if (!existsSync(gridDir)) mkdirSync(gridDir, { recursive: true });
+
+  if (!stats.gridStats[gridSize]) {
+    stats.gridStats[gridSize] = { total: levelCount, generated: 0, failed: 0, timeMs: 0 };
+  }
+  const gridStats = stats.gridStats[gridSize];
+  const gridStart = Date.now();
+  const scorer = new DifficultyScorer();
+  const [minDiff, maxDiff] = getTargetDifficultyRange(gridSize);
+  const [minColors] = COLOR_RANGE_BY_GRID[gridSize];
+  const mechanics = getAllowedMechanics(gridSize);
+
+  console.log(`\n⚙️  Using MUTATION strategy for ${gridSize}x${gridSize}`);
+  console.log(`   Step 1: Bootstrap first level (may take 10-30 min)`);
+  console.log(`   Step 2: Mutate to create remaining levels (~1-2 min each)`);
+
+  // Step 1: Bootstrap first level
+  let seed: LevelData | null = null;
+  const bootstrapStart = Date.now();
+
+  console.log(`\n🔨 Bootstrapping first level...`);
+  for (let attempt = 0; attempt < 2000; attempt++) {
+    if (attempt % 100 === 0) {
+      const elapsed = ((Date.now() - bootstrapStart) / 60000).toFixed(1);
+      console.log(`   Bootstrap attempt ${attempt}/2000 (${elapsed}min)`);
+    }
+    seed = PuzzleGenerator.bootstrap(gridSize, minColors, 30, mechanics, 1);
+    if (seed) {
+      console.log(`   ✅ Bootstrap succeeded on attempt ${attempt}! (${((Date.now()-bootstrapStart)/60000).toFixed(1)}min)`);
+      break;
+    }
   }
 
-  // Generate for each grid size
-  for (const gridSize of grids) {
-    if (!LEVEL_COUNTS_BY_GRID[gridSize]) {
-      console.warn(`⚠️  No level count for grid ${gridSize}×${gridSize}, skipping`);
-      continue;
+  if (!seed) {
+    console.log(`\n❌ Bootstrap failed after 2000 attempts. Cannot generate ${gridSize}x${gridSize}.`);
+    gridStats.failed = levelCount;
+    return;
+  }
+
+  // Save seed as first level
+  let nextIndex = 1;
+  while (existingIndices.has(nextIndex)) nextIndex++;
+  const seedId = `g${String(gridSize).padStart(2, '0')}_${String(nextIndex).padStart(3, '0')}`;
+  seed.id = seedId;
+  seed.globalIndex = nextIndex;
+  writeFileSync(join(gridDir, `${seed.id}.json`), JSON.stringify(seed, null, 2), 'utf8');
+  existingIndices.add(nextIndex);
+  gridStats.generated = 1;
+  stats.generatedLevels = 1;
+  console.log(`   💾 Saved ${seed.id}`);
+
+  // Step 2: Mutate to create remaining levels
+  let currentLevels = [seed];
+  console.log(`\n🧬 Mutating to create ${levelCount - existingIndices.size} more levels...`);
+
+  while (existingIndices.size < levelCount) {
+    nextIndex = 1;
+    while (existingIndices.has(nextIndex)) nextIndex++;
+    const targetDifficulty = minDiff + Math.floor((nextIndex / levelCount) * (maxDiff - minDiff));
+
+    const seedIdx = Math.floor(Math.random() * currentLevels.length);
+    const seedLevel = currentLevels[seedIdx];
+
+    console.log(`  [${nextIndex}/${levelCount}] Mutating from ${seedLevel.id}...`);
+    const mutStart = Date.now();
+
+    const mutated = PuzzleGenerator.mutate(seedLevel, nextIndex, targetDifficulty);
+
+    if (mutated) {
+      const mutId = `g${String(gridSize).padStart(2, '0')}_${String(nextIndex).padStart(3, '0')}`;
+      mutated.id = mutId;
+      mutated.globalIndex = nextIndex;
+      writeFileSync(join(gridDir, `${mutated.id}.json`), JSON.stringify(mutated, null, 2), 'utf8');
+
+      existingIndices.add(nextIndex);
+      gridStats.generated++;
+      stats.generatedLevels++;
+      currentLevels.push(mutated);
+      console.log(`  ✅ ${mutId} in ${((Date.now() - mutStart) / 1000).toFixed(0)}s (score: ${mutated.difficultyScore})`);
+    } else {
+      gridStats.failed++;
+      stats.failedLevels++;
+      console.log(`  ❌ Mutation failed (${((Date.now() - mutStart) / 1000).toFixed(0)}s)`);
     }
 
-    generateForGridSize(gridSize, stats);
+    gridStats.timeMs = Date.now() - gridStart;
+    saveStats(stats);
   }
 
-  // Final summary
-  const totalTime = Date.now() - stats.startTime;
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`🎉 GENERATION COMPLETE!`);
-  console.log(`   Total levels generated: ${stats.generatedLevels}`);
-  console.log(`   Total failed: ${stats.failedLevels}`);
-  console.log(`   Total time: ${formatTime(totalTime)}`);
-  console.log(`${'='.repeat(60)}\n`);
+  console.log(`\n✅ Grid ${gridSize}x${gridSize}: ${gridStats.generated}/${levelCount} in ${formatTime(gridStats.timeMs)}`);
 }
 
-// ─── CLI Interface ────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+function generateForGridSize(gridSize: number, stats: GenerationStats): void {
+  const levelCount = LEVEL_COUNTS_BY_GRID[gridSize];
+  const existingIndices = loadExistingLevels(gridSize);
+
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`Generating ${levelCount} levels for ${gridSize}x${gridSize}...`);
+  console.log(`Already exists: ${existingIndices.size} levels`);
+  console.log(`${'='.repeat(60)}`);
+
+  if (existingIndices.size >= levelCount) {
+    console.log('✅ Already complete, skipping\n');
+    return;
+  }
+
+  // For grids >= 7, use mutation-based approach
+  if (gridSize >= 7) {
+    generateByMutation(gridSize, levelCount, existingIndices, stats);
+  } else {
+    generateByRandom(gridSize, levelCount, existingIndices, stats);
+  }
+}
 
 function parseArgs(): { grids?: number[] } {
   const args = process.argv.slice(2);
   const result: { grids?: number[] } = {};
-
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--grid' && args[i + 1]) {
       result.grids = [parseInt(args[i + 1], 10)];
       i++;
     }
   }
-
   return result;
 }
 
-// ─── Main Entry Point ─────────────────────────────────────────────────────────
+function main(): void {
+  const options = parseArgs();
+  const grids = options.grids || Object.keys(LEVEL_COUNTS_BY_GRID).map(Number).sort((a, b) => a - b);
 
-const options = parseArgs();
-generateAllLevels(options.grids);
+  console.log('🚀 Pre-generating puzzle levels');
+  console.log(`   Grids: ${grids.join(', ')}`);
+  console.log(`   Output: ${OUTPUT_DIR}\n`);
+
+  let stats = loadStats();
+  if (!stats) {
+    stats = { totalLevels: 0, generatedLevels: 0, failedLevels: 0, startTime: Date.now(), gridStats: {} };
+  }
+
+  for (const gridSize of grids) {
+    if (!LEVEL_COUNTS_BY_GRID[gridSize]) {
+      console.warn(`⚠️  No level count for ${gridSize}x${gridSize}, skipping`);
+      continue;
+    }
+    generateForGridSize(gridSize, stats);
+  }
+
+  const totalTime = Date.now() - stats.startTime;
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🎉 Generation complete! Total time: ${formatTime(totalTime)}`);
+  console.log(`${'='.repeat(60)}\n`);
+}
+
+main();
