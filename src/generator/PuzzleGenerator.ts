@@ -214,7 +214,7 @@ export class PuzzleGenerator {
   }
 
   // Bootstrap a level by trying many different seeds
-  static async bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): Promise<LevelData | null> {
+  static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): LevelData | null {
     const generator = new PuzzleGenerator();
     for (let i = 0; i < maxBootstraps; i++) {
       const result = generator.generate({
@@ -224,17 +224,24 @@ export class PuzzleGenerator {
         mechanics,
         seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
       });
-      if (result) return result;
+      // Validate that result has required properties
+      if (result && Array.isArray(result.pairs) && result.pairs.length > 0 && Array.isArray(result.solution) && result.solution.length > 0) {
+        return result;
+      }
     }
     return null;
   }
 
   // Mutate an existing level to create a new one
   static mutate(seed: LevelData, mutationCount: number, difficultyTarget: number): LevelData | null {
-    if (!seed || !seed.pairs || seed.pairs.length === 0) {
-      console.error(`[PG.mutate] Invalid seed received. Keys: ${seed ? Object.keys(seed).join(',') : 'null'}`);
+    // Strict validation of seed
+    if (!seed || !Array.isArray(seed.pairs) || seed.pairs.length === 0) {
       return null;
     }
+    if (!Array.isArray(seed.solution) || seed.solution.length === 0) {
+      return null;
+    }
+
     const maxRetries = 100;
     const rng = new SeededRandom(`mutate_${seed.id}_${mutationCount}_${Date.now()}`);
     const scorer = new DifficultyScorer();

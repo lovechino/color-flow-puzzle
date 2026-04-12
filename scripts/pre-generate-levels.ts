@@ -170,10 +170,14 @@ function generateByMutation(gridSize: number, levelCount: number, existingIndice
       console.log(`   Bootstrap attempt ${attempt}/2000 (${elapsed}min)`);
     }
     seed = PuzzleGenerator.bootstrap(gridSize, minColors, 30, mechanics, 1);
-    if (seed) {
+    
+    // Strict validation: seed must have pairs AND solution
+    if (seed && Array.isArray(seed.pairs) && seed.pairs.length > 0 && 
+        Array.isArray(seed.solution) && seed.solution.length > 0) {
       console.log(`   ✅ Bootstrap succeeded on attempt ${attempt}! (${((Date.now()-bootstrapStart)/60000).toFixed(1)}min)`);
       break;
     }
+    seed = null; // Reset if incomplete
   }
 
   if (!seed) {
@@ -205,6 +209,12 @@ function generateByMutation(gridSize: number, levelCount: number, existingIndice
 
     const seedIdx = Math.floor(Math.random() * currentLevels.length);
     const seedLevel = currentLevels[seedIdx];
+    
+    // Double-check seed validity before mutating
+    if (!seedLevel || !Array.isArray(seedLevel.pairs) || !Array.isArray(seedLevel.solution)) {
+      console.log(`  [${nextIndex}/${levelCount}] ⚠️  Invalid seed ${seedLevel?.id}, skipping...`);
+      continue;
+    }
 
     console.log(`  [${nextIndex}/${levelCount}] Mutating from ${seedLevel.id}...`);
     const mutStart = Date.now();
