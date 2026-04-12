@@ -42,9 +42,15 @@ export class BacktrackingSolver {
   }
 
   private getMaxCalls(s: number): number {
-    if (s <= 8) return 100_000;
-    if (s <= 12) return 300_000;
-    return 500_000;
+    // Per senior review (12/04/2026): original values were too high
+    // A bad seed fails within 30K-80K calls, not 500K
+    // Reducing MAX_CALLS makes failed attempts return quickly
+    if (s <= 6)  return 20_000;     // Small grids fail very fast
+    if (s <= 8)  return 50_000;     // 6.25x faster for 8x8
+    if (s <= 10) return 100_000;    // 3x faster for 10x10
+    if (s <= 12) return 200_000;    // 1.5x faster for 12x12
+    if (s <= 16) return 400_000;    // Large grids
+    return 700_000;                  // Very large grids
   }
 
   private format(state: SolverState): SolutionPath[] {

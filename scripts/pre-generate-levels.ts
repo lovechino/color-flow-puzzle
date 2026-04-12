@@ -167,12 +167,14 @@ function generateByMutation(gridSize: number, levelCount: number, existingIndice
   const maxBootstraps = gridSize >= 8 ? 5000 : 2000;
 
   console.log(`\n🔨 Bootstrapping first level (up to ${maxBootstraps} attempts)...`);
+  const bootstrapStartTime = Date.now();
+  
   for (let attempt = 0; attempt < maxBootstraps; attempt++) {
-    // Progress logging every 100 attempts
-    if (attempt % 100 === 0) {
-      const elapsed = ((Date.now() - bootstrapStart) / 60000).toFixed(1);
-      const rate = attempt > 0 ? (attempt / ((Date.now() - bootstrapStart) / 1000)).toFixed(1) : '?';
-      console.log(`   Bootstrap attempt ${attempt}/${maxBootstraps} (${elapsed}min, ${rate}/sec)`);
+    // Progress logging every 10 attempts for visibility
+    if (attempt % 10 === 0) {
+      const elapsed = ((Date.now() - bootstrapStartTime) / 1000).toFixed(0);
+      const rate = attempt > 0 ? (attempt / ((Date.now() - bootstrapStartTime) / 1000)).toFixed(1) : '?';
+      process.stdout.write(`\r  Bootstrap ${gridSize}×${gridSize}: attempt ${attempt}/${maxBootstraps} (${elapsed}s, ${rate}/sec)...`);
     }
     seed = PuzzleGenerator.bootstrap(gridSize, minColors, 30, mechanics, 1);
     
@@ -298,6 +300,20 @@ function main(): void {
   if (!stats) {
     stats = { totalLevels: 0, generatedLevels: 0, failedLevels: 0, startTime: Date.now(), gridStats: {} };
   }
+
+  // Graceful shutdown handler — save progress before exit
+  process.on('SIGINT', () => {
+    console.log('\n\n⚠️  Received SIGINT. Saving progress before exit...');
+    saveStats(stats);
+    console.log('✅ Progress saved to generation-stats.json');
+    console.log('💡 Run the same command to resume from where you left off.');
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    saveStats(stats);
+    process.exit(0);
+  });
 
   for (const gridSize of grids) {
     if (!LEVEL_COUNTS_BY_GRID[gridSize]) {

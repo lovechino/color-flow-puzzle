@@ -118,11 +118,13 @@ export class PuzzleGenerator {
   generate(config: GeneratorConfig): LevelData | null {
     const { gridSize, numColors, targetDifficulty, mechanics, seed } = config;
 
-    // Scale attempts with grid size - larger grids need many more attempts
+    // Scale attempts with grid size - reduced MAX_CALLS means more attempts
+    // Per senior review: failed attempts return quickly now (50K vs 500K)
+    // So we can afford more attempts
     const maxAttempts = gridSize <= 5 ? 30
                        : gridSize <= 7 ? 200
-                       : gridSize <= 9 ? 1000
-                       : gridSize <= 12 ? 2000
+                       : gridSize <= 9 ? 2000
+                       : gridSize <= 12 ? 3000
                        : 5000;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
