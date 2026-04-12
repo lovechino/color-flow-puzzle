@@ -13,6 +13,9 @@ function mutateLevelInternal(seed: LevelData, rng: SeededRandom): LevelData | nu
   const solver = new BacktrackingSolver();
   const gridSize = seed.gridSize;
 
+  // Guard: ensure seed has valid pairs
+  if (!seed || !seed.pairs || seed.pairs.length === 0) return null;
+
   // Copy pairs and mutate positions
   const pairs = seed.pairs.map(p => ({
     color: p.color as Color,
@@ -228,6 +231,10 @@ export class PuzzleGenerator {
 
   // Mutate an existing level to create a new one
   static mutate(seed: LevelData, mutationCount: number, difficultyTarget: number): LevelData | null {
+    if (!seed || !seed.pairs || seed.pairs.length === 0) {
+      console.error(`[PG.mutate] Invalid seed received. Keys: ${seed ? Object.keys(seed).join(',') : 'null'}`);
+      return null;
+    }
     const maxRetries = 100;
     const rng = new SeededRandom(`mutate_${seed.id}_${mutationCount}_${Date.now()}`);
     const scorer = new DifficultyScorer();
