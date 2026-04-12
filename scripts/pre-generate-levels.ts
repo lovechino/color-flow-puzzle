@@ -162,12 +162,17 @@ function generateByMutation(gridSize: number, levelCount: number, existingIndice
   // Step 1: Bootstrap first level
   let seed: LevelData | null = null;
   const bootstrapStart = Date.now();
+  
+  // Increase max attempts for large grids
+  const maxBootstraps = gridSize >= 8 ? 5000 : 2000;
 
-  console.log(`\n🔨 Bootstrapping first level...`);
-  for (let attempt = 0; attempt < 2000; attempt++) {
+  console.log(`\n🔨 Bootstrapping first level (up to ${maxBootstraps} attempts)...`);
+  for (let attempt = 0; attempt < maxBootstraps; attempt++) {
+    // Progress logging every 100 attempts
     if (attempt % 100 === 0) {
       const elapsed = ((Date.now() - bootstrapStart) / 60000).toFixed(1);
-      console.log(`   Bootstrap attempt ${attempt}/2000 (${elapsed}min)`);
+      const rate = attempt > 0 ? (attempt / ((Date.now() - bootstrapStart) / 1000)).toFixed(1) : '?';
+      console.log(`   Bootstrap attempt ${attempt}/${maxBootstraps} (${elapsed}min, ${rate}/sec)`);
     }
     seed = PuzzleGenerator.bootstrap(gridSize, minColors, 30, mechanics, 1);
     

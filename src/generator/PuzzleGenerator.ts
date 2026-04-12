@@ -121,8 +121,9 @@ export class PuzzleGenerator {
     // Scale attempts with grid size - larger grids need many more attempts
     const maxAttempts = gridSize <= 5 ? 30
                        : gridSize <= 7 ? 200
-                       : gridSize <= 10 ? 500
-                       : 1000;
+                       : gridSize <= 9 ? 1000
+                       : gridSize <= 12 ? 2000
+                       : 5000;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const retrySeed = typeof seed === 'string'
@@ -217,20 +218,14 @@ export class PuzzleGenerator {
   static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], maxBootstraps: number = 1000): LevelData | null {
     const generator = new PuzzleGenerator();
     
-    // Strategy: try with fewer colors first, then ramp up
-    // This is more likely to find a solvable configuration
-    const [minColors, maxColors] = [Math.max(3, numColors - 2), numColors];
-    
+    // Keep target colors — optimize solver instead
+    // For large grids, increase attempts and use relaxed constraints
     for (let i = 0; i < maxBootstraps; i++) {
-      // Progressively try different color counts
-      const currentColors = minColors + (i % (maxColors - minColors + 1));
-      const currentDifficulty = 10 + (i % 30); // Start with easy difficulties
-      
       const result = generator.generate({
         gridSize,
-        numColors: currentColors,
-        targetDifficulty: currentDifficulty,
-        mechanics: [], // No mechanics for bootstrap - simpler is better
+        numColors,
+        targetDifficulty: 10 + (i % 30), // Start easy, ramp up slowly
+        mechanics: [], // No mechanics for bootstrap
         seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
       });
       
