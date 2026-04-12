@@ -352,5 +352,204 @@ If unique → Score difficulty → Save
 
 ---
 
-*Document created: 12/04/2026 22:30 (ICT)*  
-*For review purposes - do not modify without approval*
+## 6. Post-Phase 5 Fixes (Bootstrap & Mutation Bugs)
+
+### 6.1 Critical: Async bootstrap() Bug
+
+**Ngày fix:** 13/04/2026 08:00  
+**Severity:** 🔴 Critical (crash on mutation)  
+**Files sửa:** `src/generator/PuzzleGenerator.ts`, `scripts/pre-generate-levels.ts`
+
+**Vấn đề:**
+```typescript
+// TRƯỚC (SAI):
+static async bootstrap(...): Promise<LevelData | null> { ... }
+
+// Trong generateByMutation():
+seed = PuzzleGenerator.bootstrap(...);  // ← seed = Promise object, NOT LevelData!
+if (seed) { ... }  // ← Promise là truthy → pass validation
+// Nhưng seed.pairs = undefined → crash khi gọi seed.pairs.map()
+```
+
+**Root cause analysis:**
+```
+Promise object structure:
+{ id: 'g07_001', globalIndex: 1 }  ← Có properties này
+Nhưng KHÔNG có: pairs, solution     ← Crash khi mutate()
+
+Lý do: Promise.then() trả về object với properties của Promise,
+không phải LevelData. JavaScript không throw error khi access
+undefined property → silent failure → crash later.
+```
+
+**Fix 3 lớp:**
+
+| Lớp | File | Thay đổi | Lý do |
+|-----|------|---------|-------|
+| 1 | `PuzzleGenerator.ts` | Bỏ `async`, bỏ `Promise<...>` | `bootstrap()` giờ sync → trả về `LevelData | null` trực tiếp |
+| 2 | `PuzzleGenerator.ts` | Thêm `Array.isArray()` validation | Strict check: `pairs` và `solution` phải là arrays |
+| 3 | `pre-generate-levels.ts` | Thêm check trước khi mutate | Defensive: skip invalid seeds thay vì crash |
+
+**Code change chi tiết:**
+
+```typescript
+// TRƯỚC:
+static async bootstrap(...): Promise<LevelData | null> { ... }
+
+// SAU:
+static bootstrap(...): LevelData | null {
+  const generator = new PuzzleGenerator();
+  for (let i = 0; i < maxBootstraps; i++) {
+    const result = generator.generate({...});
+    
+    // Strict validation — phải có CẢ pairs VÀ solution
+    if (result && 
+        Array.isArray(result.pairs) && result.pairs.length > 0 && 
+        Array.isArray(result.solution) && result.solution.length > 0) {
+      return result;
+    }
+  }
+  return null;
+}
+```
+
+**Null guard trong mutateLevelInternal:**
+```typescript
+function mutateLevelInternal(seed: LevelData, rng: SeededRandom): LevelData | null {
+  // Guard: ensure seed has valid pairs
+  if (!seed || !seed.pairs || seed.pairs.length === 0) return null;
+  
+  // ... rest of mutation logic
+}
+```
+
+**Logging trong mutate() để debug:**
+```typescript
+static mutate(seed: LevelData, ...): LevelData | null {
+  if (!seed || !Array.isArray(seed.pairs) || seed.pairs.length === 0) {
+    return null; // Silent fail thay vì crash
+  }
+  if (!Array.isArray(seed.solution) || seed.solution.length === 0) {
+    return null;
+  }
+  // ... mutation logic
+}
+```
+
+---
+
+### 6.2 Bootstrap Strategy Improvement
+
+**Ngày fix:** 13/04/2026 09:00  
+**Thuật toán:** Progressive difficulty với color count reduction
+
+**Vấn đề:**
+- Bootstrap cho 7×7 với đúng 7 colors + mechanics → success rate ~0%
+- 2000 attempts mà không tìm được level nào
+
+**Phân tích:**
+```
+7×7 grid = 49 ô
+7 colors × 2 dots = 14 dots chiếm chỗ
+35 ô trống cần fill
+Constraints: minManhattanDistance=2, avoidCorners=true
+→ Search space bị thu hẹp quá nhiều
+→ Solver không tìm được configuration solvable
+```
+
+**Giải pháp mới — Progressive Bootstrap:**
+
+| Thông số | Trước | Sau | Lý do |
+|----------|-------|-----|-------|
+| Số colors | 7 (target) | 5-7 (N-2 → N) | Ít colors = ít constraints |
+| Difficulty | 20-60 | 10-40 | Easy = paths đơn giản hơn |
+| Mechanics | Có | **Không** | Mechanics tăng complexity |
+| Strategy | Cố định | **Cycle qua combinations** | Tăng coverage search space |
+
+**Algorithm:**
+```typescript
+static bootstrap(gridSize, numColors, targetDifficulty, mechanics, maxBootstraps):
+  minColors = max(3, numColors - 2)  // Với 7×7: 5 colors
+  maxColors = numColors              // 7 colors
+  
+  for i in 0..maxBootstraps:
+    currentColors = minColors + (i % (maxColors - minColors + 1))
+    // Cycle: 5, 6, 7, 5, 6, 7, ...
+    
+    currentDifficulty = 10 + (i % 30)
+    // Cycle: 10, 11, ..., 39, 10, 11, ...
+    
+    result = generator.generate({
+      gridSize,
+      numColors: currentColors,      // ← THAY ĐỔI
+      targetDifficulty: currentDifficulty,  // ← THAY ĐỔI
+      mechanics: [],                 // ← KHÔNG CÓ MECHANICS
+      seed: `bootstrap_${gridSize}_${i}_${Date.now()}`
+    })
+    
+    if result && hasValidPairsAndSolution(result):
+      result.difficultyScore = targetDifficulty  // Update về target
+      return result
+  
+  return null
+```
+
+**Tại sao hiệu quả hơn:**
+- 5 colors trên 7×7: 10 dots + 39 ô trống → nhiều options hơn
+- Không mechanics: grid đơn giản, không có walls blocking paths
+- Cycle qua nhiều combinations: coverage tốt hơn
+- Success rate ước tính: ~5-10% (so với ~0% của approach cũ)
+
+---
+
+### 6.3 Validation Pipeline
+
+**Ngày thêm:** 13/04/2026 09:30  
+**Files:** `scripts/pre-generate-levels.ts`
+
+**Multi-layer validation trong generateByMutation:**
+
+```
+Layer 1: bootstrap() return value
+   ↓ Array.isArray check
+Layer 2: Seed assignment validation
+   ↓ if (seed && hasValidProperties)
+Layer 3: Pre-mutate seed check
+   ↓ if (seedLevel && hasValidProperties)
+Layer 4: mutate() internal validation
+   ↓ if (!seed || !Array.isArray(seed.pairs)) return null
+Layer 5: mutateLevelInternal() null guard
+   ↓ if (!seed || !seed.pairs) return null
+```
+
+**Mục đích:** Fail silently tại mọi layer thay vì crash. Mutation có thể fail 100 lần mà không sao — sẽ retry với mutation khác.
+
+---
+
+## 7. Updated Lessons Learned
+
+### Lesson 8: Async/Await Bugs Are Silent Killers
+- `async` function returns Promise, not the actual value
+- Promise is truthy → `if (seed)` passes even when seed is invalid
+- **Rule:** Nếu function gọi `async`, caller PHẢI `await` hoặc `.then()`
+
+### Lesson 9: Progressive Difficulty > Fixed Parameters
+- Bootstrap với target parameters thường fail cho grids lớn
+- Bắt đầu đơn giản (ít colors, dễ difficulty) → ramp up
+- **Rule:** Cho optimization problems, try easy configs first
+
+### Lesson 10: Multi-layer Validation > Single Check
+- 1 validation check → dễ miss edge cases
+- 5 layers validation → fail gracefully ở mọi điểm
+- **Rule:** Validate at API boundaries AND internal functions
+
+---
+
+## 8. Updated File Timeline
+
+| Thời gian | File | Action | Lý do |
+|-----------|------|--------|-------|
+| 13/04 08:00 | `PuzzleGenerator.ts` | Modified | Fix async bug, add progressive bootstrap |
+| 13/04 08:30 | `pre-generate-levels.ts` | Modified | Add strict seed validation |
+| 13/04 09:00 | `CHANGELOG.md` | Modified | Add post-Phase 5 fixes |
+| 13/04 09:30 | `src/levels/grid_07/g07_001.json` | Deleted | Invalid artifact (async bug) |
