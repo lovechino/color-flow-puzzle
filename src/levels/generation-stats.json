@@ -1,0 +1,14 @@
+{
+  "totalLevels": 28,
+  "generatedLevels": 0,
+  "failedLevels": 2,
+  "startTime": 1775969716276,
+  "gridStats": {
+    "7": {
+      "total": 28,
+      "generated": 0,
+      "failed": 2,
+      "timeMs": 46108
+    }
+  }
+}

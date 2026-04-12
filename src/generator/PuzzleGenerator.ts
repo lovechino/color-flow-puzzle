@@ -33,7 +33,13 @@ export class PuzzleGenerator {
   generate(config: GeneratorConfig): LevelData | null {
     const { gridSize, numColors, targetDifficulty, mechanics, seed } = config;
 
-    for (let attempt = 0; attempt < 30; attempt++) {
+    // Scale attempts with grid size - larger grids need many more attempts
+    const maxAttempts = gridSize <= 5 ? 30
+                       : gridSize <= 7 ? 200
+                       : gridSize <= 10 ? 500
+                       : 1000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const retrySeed = typeof seed === 'string'
         ? `${seed}_retry${attempt}`
         : seed + attempt * 1000;
