@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npx *)",
+      "Bash(timeout *)",
+      "Bash(powershell *)",
+      "Bash(select-string *)",
+      "Bash(select-object *)",
+      "Bash(del *)",
+      "Bash(node *)",
+      "Bash(rmdir *)",
+      "Bash(npm *)",
+      "Bash(generate-levels.bat *)",
+      "Bash(git add *)"
+    ]
+  },
+  "$version": 3
+}

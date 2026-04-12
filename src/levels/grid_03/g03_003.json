@@ -1,0 +1,102 @@
+{
+  "id": "g03_003",
+  "gridSize": 3,
+  "globalIndex": 3,
+  "pairs": [
+    {
+      "color": "red",
+      "start": [
+        1,
+        1
+      ],
+      "end": [
+        0,
+        1
+      ]
+    },
+    {
+      "color": "blue",
+      "start": [
+        2,
+        0
+      ],
+      "end": [
+        0,
+        0
+      ]
+    },
+    {
+      "color": "green",
+      "start": [
+        2,
+        1
+      ],
+      "end": [
+        2,
+        2
+      ]
+    }
+  ],
+  "walls": [],
+  "mixers": [],
+  "teleports": [],
+  "locks": [],
+  "solution": [
+    {
+      "color": "blue",
+      "path": [
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "color": "green",
+      "path": [
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "color": "red",
+      "path": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    }
+  ],
+  "difficultyScore": 32,
+  "difficultyLabel": "medium",
+  "par": 9,
+  "estimatedSolveTime": 30,
+  "mechanics": []
+}

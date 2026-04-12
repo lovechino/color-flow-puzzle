@@ -1,0 +1,22 @@
+{
+  "id": "g03_001",
+  "gridSize": 3,
+  "globalIndex": 1,
+  "pairs": [
+    { "color": "red", "start": [0, 0], "end": [2, 2] },
+    { "color": "blue", "start": [0, 2], "end": [2, 0] }
+  ],
+  "walls": [],
+  "mixers": [],
+  "teleports": [],
+  "locks": [],
+  "solution": [
+    { "color": "red", "path": [[0,0],[0,1],[1,1],[2,1],[2,2]] },
+    { "color": "blue", "path": [[0,2],[1,2],[2,2],[2,1],[2,0]] }
+  ],
+  "difficultyScore": 3,
+  "difficultyLabel": "trivial",
+  "par": 8,
+  "estimatedSolveTime": 15,
+  "mechanics": []
+}
