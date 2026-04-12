@@ -216,54 +216,22 @@ export class PuzzleGenerator {
     return null;
   }
 
-  // Bootstrap a single attempt — direct placeDots + solve, no retry loop
-  static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, _mechanics: Mechanic[], attemptIndex: number = 0): LevelData | null {
-    const scorer = new DifficultyScorer();
-    const validator = new UniquenessValidator();
-    const rng = new SeededRandom(`bootstrap_${gridSize}_${attemptIndex}_${Date.now()}`);
-
-    // Step 1: Place dots (one attempt only)
-    const pairs = placeDots(gridSize, numColors, rng, {
-      minManhattanDistance: gridSize === 3 ? 1 : Math.max(2, Math.floor(gridSize * 0.35)),
-      minColorSpread: 1,
-      avoidCorners: gridSize > 3,
-    });
-    if (!pairs) return null;
-
-    // Step 2: Solve (one attempt only)
-    const solver = new BacktrackingSolver();
-    const solution = solver.solve(gridSize, pairs, []);
-    if (!solution) return null;
-
-    // Step 3: Create LevelData
-    const level: LevelData = {
-      id: `g${String(gridSize).padStart(2, '0')}_bootstrap_${attemptIndex}`,
+  // Bootstrap a single attempt — no internal retry loop
+  // The caller (pre-generate-levels.ts) handles the retry loop
+  static bootstrap(gridSize: number, numColors: number, targetDifficulty: number, mechanics: Mechanic[], attemptIndex: number = 0): LevelData | null {
+    // Use unique seed per attempt
+    const seed = `bootstrap_${gridSize}_${attemptIndex}_${Date.now()}`;
+    
+    const generator = new PuzzleGenerator();
+    
+    // Single attempt — no retry loop
+    return generator.generate({
       gridSize,
-      globalIndex: 0,
-      pairs,
-      walls: [],
-      mixers: [],
-      teleports: [],
-      locks: [],
-      shapeMask: undefined,
-      solution,
-      difficultyScore: 0,
-      difficultyLabel: 'trivial',
-      par: solution.reduce((sum, s) => sum + s.path.length, 0),
-      estimatedSolveTime: 0,
-      mechanics: [],
-    };
-
-    // Step 4: Quick validation
-    if (validator.countSolutions(level, 2) !== 1) return null;
-
-    // Step 5: Score difficulty
-    const score = scorer.score(level);
-    level.difficultyScore = score;
-    level.difficultyLabel = scorer.getLabel(score);
-    level.estimatedSolveTime = Math.round(level.par * 1.5 + score * 0.5);
-
-    return level;
+      numColors,
+      targetDifficulty,
+      mechanics,
+      seed
+    });
   }
 
   // Mutate an existing level to create a new one
