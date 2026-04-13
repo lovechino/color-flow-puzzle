@@ -287,26 +287,32 @@ export class BacktrackingSolver {
   }
 
   private findCandidatePaths(grid: GridCell[][], start: [number, number], end: [number, number], color: Color): [number, number][][] {
+    // Reduce maxPaths for large grids — fewer paths = faster solve
+    const effectiveMax = this.size >= 8 ? 8 : 25;
     const paths: [number, number][][] = [];
     const vis = new Set<string>([`${start[0]},${start[1]}`]);
-    this.dfs(grid, start, end, color, [start], vis, paths);
+    this.dfsLimited(grid, start, end, color, [start], vis, paths, effectiveMax);
     return paths.sort((a, b) => a.length - b.length);
   }
 
-  private dfs(grid: GridCell[][], cur: [number, number], end: [number, number], color: Color, path: [number, number][], vis: Set<string>, paths: [number, number][][]) {
-    if (paths.length >= 25) return;
+  private dfsLimited(grid: GridCell[][], cur: [number, number], end: [number, number], color: Color, path: [number, number][], vis: Set<string>, paths: [number, number][][], maxPaths: number): void {
+    if (paths.length >= maxPaths) return;
     if (cur[0] === end[0] && cur[1] === end[1]) {
       paths.push([...path]);
       return;
     }
+    // Limit path length to avoid deep recursion on large grids
+    const maxLen = this.size >= 10 ? this.size * 4 : this.size * this.size;
+    if (path.length > maxLen) return;
     const neighbors = this.getSortedNeighbors(grid, cur, end, color, vis);
     for (const [nr, nc] of neighbors) {
       const key = `${nr},${nc}`;
       vis.add(key);
       path.push([nr, nc]);
-      this.dfs(grid, [nr, nc], end, color, path, vis, paths);
+      this.dfsLimited(grid, [nr, nc], end, color, path, vis, paths, maxPaths);
       path.pop();
       vis.delete(key);
+      if (paths.length >= maxPaths) return;
     }
   }
 
