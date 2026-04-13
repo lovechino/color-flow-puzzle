@@ -1,0 +1,96 @@
+{
+  "startedAt": "2026-04-13T01:00:34.345Z",
+  "lastUpdatedAt": "2026-04-13T01:00:50.753Z",
+  "grids": {
+    "3": {
+      "target": 3,
+      "completed": 0,
+      "status": "pending"
+    },
+    "4": {
+      "target": 5,
+      "completed": 0,
+      "status": "pending"
+    },
+    "5": {
+      "target": 10,
+      "completed": 0,
+      "status": "pending"
+    },
+    "6": {
+      "target": 18,
+      "completed": 0,
+      "status": "pending"
+    },
+    "7": {
+      "target": 28,
+      "completed": 0,
+      "status": "failed"
+    },
+    "8": {
+      "target": 40,
+      "completed": 0,
+      "status": "failed"
+    },
+    "9": {
+      "target": 55,
+      "completed": 0,
+      "status": "failed"
+    },
+    "10": {
+      "target": 70,
+      "completed": 0,
+      "status": "failed"
+    },
+    "11": {
+      "target": 88,
+      "completed": 0,
+      "status": "failed"
+    },
+    "12": {
+      "target": 108,
+      "completed": 0,
+      "status": "failed"
+    },
+    "13": {
+      "target": 130,
+      "completed": 0,
+      "status": "failed"
+    },
+    "14": {
+      "target": 155,
+      "completed": 0,
+      "status": "failed"
+    },
+    "15": {
+      "target": 182,
+      "completed": 0,
+      "status": "failed"
+    },
+    "16": {
+      "target": 212,
+      "completed": 0,
+      "status": "failed"
+    },
+    "17": {
+      "target": 245,
+      "completed": 0,
+      "status": "failed"
+    },
+    "18": {
+      "target": 280,
+      "completed": 0,
+      "status": "failed"
+    },
+    "19": {
+      "target": 318,
+      "completed": 0,
+      "status": "pending"
+    },
+    "20": {
+      "target": 358,
+      "completed": 0,
+      "status": "failed"
+    }
+  }
+}

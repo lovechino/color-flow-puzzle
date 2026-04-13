@@ -56,7 +56,8 @@ function loadSeedForGrid(gridSize: number): LevelData | null {
   if (!existsSync(seedPath)) return null;
   try {
     const seed = JSON.parse(readFileSync(seedPath, 'utf8')) as LevelData;
-    if (!Array.isArray(seed.solution) || seed.solution.length === 0) return null;
+    // Seed chỉ cần có valid pairs — solution sẽ được tính khi mutate
+    if (!Array.isArray(seed.pairs) || seed.pairs.length === 0) return null;
     return seed;
   } catch { return null; }
 }
