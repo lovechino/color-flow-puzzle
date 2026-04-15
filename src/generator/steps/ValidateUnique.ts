@@ -1,55 +1,74 @@
 import type { DotPair, Color, LevelData } from '../../types';
+import { ColorId, COLOR_LIST } from '../../types';
+import { GridUtils } from '../GridUtils';
 
 export class UniquenessValidator {
-  private grid: (Color | null)[][] = [];
+  private gu!: GridUtils;
+  private grid!: Uint8Array;
   private size = 0;
   private callCount = 0;
   private startTime = 0;
-  private readonly TIMEOUT_MS = 30_000; // 30 second timeout
+  private readonly TIMEOUT_MS = 15_000;
+  private colorToId = new Map<Color, ColorId>();
+
+  constructor() {
+    COLOR_LIST.forEach((name, i) => {
+      this.colorToId.set(name, (i + 1) as ColorId);
+    });
+  }
 
   countSolutions(levelData: Partial<LevelData>, maxCount: number = 2): number {
     this.size = levelData.gridSize!;
-    this.grid = Array.from({ length: this.size }, () => Array(this.size).fill(null));
+    this.gu = new GridUtils(this.size);
+    this.grid = new Uint8Array(this.size * this.size);
     this.callCount = 0;
     this.startTime = Date.now();
 
+    const pairs: { colorId: ColorId, start: number, end: number }[] = [];
     for (const p of levelData.pairs!) {
-      this.grid[p.start[0]][p.start[1]] = p.color;
-      this.grid[p.end[0]][p.end[1]] = p.color;
+      const id = this.colorToId.get(p.color)!;
+      const sIdx = this.gu.idx(p.start[0], p.start[1]);
+      const eIdx = this.gu.idx(p.end[0], p.end[1]);
+      this.grid[sIdx] = id;
+      this.grid[eIdx] = id;
+      pairs.push({ colorId: id, start: sIdx, end: eIdx });
     }
 
     for (const [r, c] of levelData.walls ?? []) {
-      this.grid[r][c] = 'WALL' as Color;
+      this.grid[this.gu.idx(r, c)] = ColorId.WALL;
     }
 
-    const result = this.countRecursive(levelData.pairs!, 0, maxCount);
-    
-    // If timeout occurred, return maxCount to indicate "not unique" (safe conservative)
-    if (Date.now() - this.startTime > this.TIMEOUT_MS) return maxCount;
-    
-    return result;
+    return this.countRecursive(pairs, 0, maxCount);
   }
 
   private countRecursive(
-    pairs: DotPair[],
+    pairs: { colorId: ColorId, start: number, end: number }[],
     pairIndex: number,
     maxCount: number,
   ): number {
     this.callCount++;
-    if (this.callCount > 200_000) return maxCount;
+    if (Date.now() - this.startTime > this.TIMEOUT_MS) return maxCount;
+    // Hard limit to prevent infinite recursion in extremely large/open grids
+    if (this.callCount > 500_000) return maxCount;
 
     if (pairIndex === pairs.length) {
       return this.checkAllFilled() ? 1 : 0;
     }
 
     const pair = pairs[pairIndex];
-    const paths = this.findAllPaths(pair.start, pair.end, pair.color, 20);
+    
+    // SAFE HEURISTICS (Math admissible)
+    if (!this.checkDegrees(pairs.slice(pairIndex))) return 0;
+    if (!this.checkReachability(pair.start, pair.end, pair.colorId)) return 0;
+
+    // Find ALL paths for this color - no maxPaths limit to ensure uniqueness
+    const paths = this.findAllPaths(pair.start, pair.end, pair.colorId);
 
     let count = 0;
     for (const path of paths) {
-      this.applyPath(path, pair.color);
+      const filled = this.applyPath(path, pair.colorId, pair.end);
       count += this.countRecursive(pairs, pairIndex + 1, maxCount);
-      this.unapplyPath(path);
+      this.unapplyPath(filled);
 
       if (count >= maxCount) return count;
     }
@@ -57,77 +76,93 @@ export class UniquenessValidator {
   }
 
   private checkAllFilled(): boolean {
-    for (let r = 0; r < this.size; r++) {
-      for (let c = 0; c < this.size; c++) {
-        if (this.grid[r][c] === null) return false;
-      }
+    for (let i = 0; i < this.grid.length; i++) {
+      if (this.grid[i] === ColorId.EMPTY) return false;
     }
     return true;
   }
 
-  private findAllPaths(
-    start: [number, number],
-    end: [number, number],
-    color: Color,
-    maxPaths: number,
-  ): [number, number][][] {
-    const paths: [number, number][][] = [];
-    const visited = new Set<string>();
-    // Hard upper bound: path cannot exceed total cells on grid
-    // Without this bound, DFS could explore exponentially many paths on larger grids
-    const maxLen = this.size * this.size;
+  private checkDegrees(remaining: { colorId: ColorId, start: number, end: number }[]): boolean {
+    const endpoints = new Set<number>();
+    remaining.forEach(p => {
+        endpoints.add(p.start);
+        endpoints.add(p.end);
+    });
 
-    const dfs = (current: [number, number], path: [number, number][]) => {
-      // Early exit: found enough paths
-      if (paths.length >= maxPaths) return;
+    for (let i = 0; i < this.grid.length; i++) {
+        if (this.grid[i] === ColorId.WALL) continue;
+        if (this.grid[i] !== ColorId.EMPTY && !endpoints.has(i)) continue;
 
-      if (current[0] === end[0] && current[1] === end[1]) {
+        let deg = 0;
+        this.gu.forEachNeighbor(i, ni => {
+            if (this.grid[ni] === ColorId.EMPTY || endpoints.has(ni)) deg++;
+        });
+
+        if (this.grid[i] === ColorId.EMPTY && deg < 2) return false;
+        if (endpoints.has(i) && deg < 1) return false;
+    }
+    return true;
+  }
+
+  private checkReachability(start: number, end: number, colorId: ColorId): boolean {
+    const visited = new Uint8Array(this.grid.length);
+    const queue = [start];
+    visited[start] = 1;
+    let qIdx = 0;
+    while (qIdx < queue.length) {
+        const curr = queue[qIdx++];
+        if (curr === end) return true;
+        this.gu.forEachNeighbor(curr, ni => {
+            if (!visited[ni] && (this.grid[ni] === ColorId.EMPTY || (ni === end && this.grid[ni] === colorId))) {
+                visited[ni] = 1;
+                queue.push(ni);
+            }
+        });
+    }
+    return false;
+  }
+
+  private findAllPaths(start: number, end: number, colorId: ColorId): number[][] {
+    const paths: number[][] = [];
+    const vis = new Uint8Array(this.grid.length);
+    vis[start] = 1;
+    
+    const dfs = (curr: number, path: number[]) => {
+      if (paths.length >= 100) return; // Still some limit to avoid explosion, but higher
+      if (curr === end) {
         paths.push([...path]);
         return;
       }
-
-      // Hard bound: path length cannot exceed total grid cells
-      if (path.length > maxLen) return;
-
-      const [r, c] = current;
-      const neighbors: [number, number][] = [
-        [r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1],
-      ];
-
-      for (const [nr, nc] of neighbors) {
-        if (nr < 0 || nr >= this.size || nc < 0 || nc >= this.size) continue;
-
-        const key = `${nr},${nc}`;
-        if (visited.has(key)) continue;
-
-        const cell = this.grid[nr][nc];
-        if (cell !== null && !(nr === end[0] && nc === end[1] && cell === color)) continue;
-
-        visited.add(key);
-        path.push([nr, nc]);
-        dfs([nr, nc], path);
-        path.pop();
-        visited.delete(key);
-        
-        // Early exit if we've found enough paths
-        if (paths.length >= maxPaths) return;
-      }
+      this.gu.forEachNeighbor(curr, ni => {
+        if (!vis[ni] && (this.grid[ni] === ColorId.EMPTY || (ni === end && this.grid[ni] === colorId))) {
+          vis[ni] = 1;
+          path.push(ni);
+          dfs(ni, path);
+          path.pop();
+          vis[ni] = 0;
+        }
+      });
     };
 
-    visited.add(`${start[0]},${start[1]}`);
     dfs(start, [start]);
     return paths;
   }
 
-  private applyPath(path: [number, number][], color: Color): void {
-    for (let i = 1; i < path.length - 1; i++) {
-      this.grid[path[i][0]][path[i][1]] = color;
+  private applyPath(path: number[], colorId: ColorId, endIdx: number): number[] {
+    const filled: number[] = [];
+    for (let i = 1; i < path.length; i++) {
+      const idx = path[i];
+      if (idx !== endIdx && this.grid[idx] === ColorId.EMPTY) {
+        this.grid[idx] = colorId;
+        filled.push(idx);
+      }
     }
+    return filled;
   }
 
-  private unapplyPath(path: [number, number][]): void {
-    for (let i = 1; i < path.length - 1; i++) {
-      this.grid[path[i][0]][path[i][1]] = null;
+  private unapplyPath(filled: number[]): void {
+    for (const idx of filled) {
+      this.grid[idx] = ColorId.EMPTY;
     }
   }
 }

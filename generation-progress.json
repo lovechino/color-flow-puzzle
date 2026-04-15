@@ -1,6 +1,6 @@
 {
   "startedAt": "2026-04-13T01:00:34.345Z",
-  "lastUpdatedAt": "2026-04-13T01:00:50.753Z",
+  "lastUpdatedAt": "2026-04-15T12:50:44.561Z",
   "grids": {
     "3": {
       "target": 3,
@@ -30,7 +30,7 @@
     "8": {
       "target": 40,
       "completed": 0,
-      "status": "failed"
+      "status": "in_progress"
     },
     "9": {
       "target": 55,
