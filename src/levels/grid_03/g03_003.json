@@ -7,21 +7,21 @@
       "color": "red",
       "start": [
         1,
-        1
+        0
       ],
       "end": [
         0,
-        1
+        0
       ]
     },
     {
       "color": "blue",
       "start": [
-        2,
-        0
+        1,
+        1
       ],
       "end": [
-        0,
+        2,
         0
       ]
     },
@@ -29,11 +29,11 @@
       "color": "green",
       "start": [
         2,
-        1
+        2
       ],
       "end": [
-        2,
-        2
+        0,
+        1
       ]
     }
   ],
@@ -43,12 +43,8 @@
   "locks": [],
   "solution": [
     {
-      "color": "blue",
+      "color": "red",
       "path": [
-        [
-          2,
-          0
-        ],
         [
           1,
           0
@@ -60,24 +56,28 @@
       ]
     },
     {
-      "color": "green",
+      "color": "blue",
       "path": [
+        [
+          1,
+          1
+        ],
         [
           2,
           1
         ],
         [
           2,
-          2
+          0
         ]
       ]
     },
     {
-      "color": "red",
+      "color": "green",
       "path": [
         [
-          1,
-          1
+          2,
+          2
         ],
         [
           1,

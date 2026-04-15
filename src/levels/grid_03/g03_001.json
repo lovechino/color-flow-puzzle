@@ -6,33 +6,33 @@
     {
       "color": "red",
       "start": [
-        1,
-        1
+        0,
+        2
       ],
       "end": [
         2,
-        2
+        0
       ]
     },
     {
       "color": "blue",
       "start": [
         1,
-        0
+        1
       ],
       "end": [
         2,
-        0
+        1
       ]
     },
     {
       "color": "green",
       "start": [
-        0,
-        0
+        1,
+        2
       ],
       "end": [
-        1,
+        2,
         2
       ]
     }
@@ -46,16 +46,24 @@
       "color": "red",
       "path": [
         [
-          1,
-          1
-        ],
-        [
-          2,
-          1
-        ],
-        [
-          2,
+          0,
           2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
         ]
       ]
     },
@@ -64,11 +72,11 @@
       "path": [
         [
           1,
-          0
+          1
         ],
         [
           2,
-          0
+          1
         ]
       ]
     },
@@ -76,27 +84,19 @@
       "color": "green",
       "path": [
         [
-          0,
-          0
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
+          1,
           2
         ],
         [
-          1,
+          2,
           2
         ]
       ]
     }
   ],
-  "difficultyScore": 32,
+  "difficultyScore": 34,
   "difficultyLabel": "medium",
   "par": 9,
-  "estimatedSolveTime": 30,
+  "estimatedSolveTime": 31,
   "mechanics": []
 }
