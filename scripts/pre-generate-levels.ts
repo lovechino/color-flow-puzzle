@@ -224,7 +224,16 @@ function parseArgs(): { grids?: number[], count?: number } {
   const result: { grids?: number[], count?: number } = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--grid' && args[i + 1]) {
-      result.grids = [parseInt(args[i + 1], 10)];
+      const gridArg = args[i + 1];
+      if (gridArg.includes('-')) {
+        const [start, end] = gridArg.split('-').map(Number);
+        result.grids = [];
+        for (let g = start; g <= end; g++) result.grids.push(g);
+      } else if (gridArg.includes(',')) {
+        result.grids = gridArg.split(',').map(Number);
+      } else {
+        result.grids = [parseInt(gridArg, 10)];
+      }
       i++;
     } else if (args[i] === '--count' && args[i + 1]) {
       result.count = parseInt(args[i + 1], 10);
