@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-04-13T01:00:34.345Z",
-  "lastUpdatedAt": "2026-04-15T12:50:44.561Z",
+  "startedAt": "2026-05-05T00:59:31.790Z",
+  "lastUpdatedAt": "2026-05-05T08:14:27.328Z",
   "grids": {
     "3": {
       "target": 3,
@@ -19,68 +19,68 @@
     },
     "6": {
       "target": 18,
-      "completed": 0,
-      "status": "pending"
+      "completed": 18,
+      "status": "completed"
     },
     "7": {
       "target": 28,
-      "completed": 0,
-      "status": "failed"
+      "completed": 28,
+      "status": "completed"
     },
     "8": {
       "target": 40,
-      "completed": 0,
-      "status": "in_progress"
+      "completed": 40,
+      "status": "completed"
     },
     "9": {
       "target": 55,
-      "completed": 0,
-      "status": "failed"
+      "completed": 55,
+      "status": "completed"
     },
     "10": {
       "target": 70,
       "completed": 0,
-      "status": "failed"
+      "status": "in_progress"
     },
     "11": {
       "target": 88,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "12": {
       "target": 108,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "13": {
       "target": 130,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "14": {
       "target": 155,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "15": {
       "target": 182,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "16": {
       "target": 212,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "17": {
       "target": 245,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "18": {
       "target": 280,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     },
     "19": {
       "target": 318,
@@ -90,7 +90,7 @@
     "20": {
       "target": 358,
       "completed": 0,
-      "status": "failed"
+      "status": "pending"
     }
   }
 }

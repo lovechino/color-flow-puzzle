@@ -1,6 +1,10 @@
-import type { DotPair, Color, LevelData } from '../../types';
+import type { Color, LevelData } from '../../types';
 import { ColorId, COLOR_LIST } from '../../types';
 import { GridUtils } from '../GridUtils';
+
+// OP-05: Module-level scratch buffer — reused across checkReachability calls
+const reachBuf = new Uint8Array(20 * 20);
+let reachEpoch = 1;
 
 export class UniquenessValidator {
   private gu!: GridUtils;
@@ -8,7 +12,13 @@ export class UniquenessValidator {
   private size = 0;
   private callCount = 0;
   private startTime = 0;
-  private readonly TIMEOUT_MS = 15_000;
+  
+  private getTimeoutMs(size: number): number {
+    if (size <= 7) return 2500;
+    if (size <= 10) return 4000;
+    return 6000;
+  }
+
   private colorToId = new Map<Color, ColorId>();
 
   constructor() {
@@ -47,31 +57,44 @@ export class UniquenessValidator {
     maxCount: number,
   ): number {
     this.callCount++;
-    if (Date.now() - this.startTime > this.TIMEOUT_MS) return maxCount;
-    // Hard limit to prevent infinite recursion in extremely large/open grids
-    if (this.callCount > 500_000) return maxCount;
+    if (Date.now() - this.startTime > this.getTimeoutMs(this.size)) return 0; // timeout: unknown, not "multiple"
+    if (this.callCount > 200000) return 0; // call limit: unknown, not "multiple"
 
     if (pairIndex === pairs.length) {
       return this.checkAllFilled() ? 1 : 0;
     }
 
     const pair = pairs[pairIndex];
-    
-    // SAFE HEURISTICS (Math admissible)
+
+    // SAFE HEURISTICS
     if (!this.checkDegrees(pairs.slice(pairIndex))) return 0;
     if (!this.checkReachability(pair.start, pair.end, pair.colorId)) return 0;
 
-    // Find ALL paths for this color - no maxPaths limit to ensure uniqueness
-    const paths = this.findAllPaths(pair.start, pair.end, pair.colorId);
-
+    // OP-04: Inline DFS with early-stop — no need to enumerate all paths first
     let count = 0;
-    for (const path of paths) {
-      const filled = this.applyPath(path, pair.colorId, pair.end);
-      count += this.countRecursive(pairs, pairIndex + 1, maxCount);
-      this.unapplyPath(filled);
 
-      if (count >= maxCount) return count;
-    }
+    const dfs = (curr: number): void => {
+      if (count >= maxCount) return; // Early stop!
+
+      if (curr === pair.end) {
+        // Path complete — recurse to next pair
+        count += this.countRecursive(pairs, pairIndex + 1, maxCount - count);
+        return;
+      }
+
+      this.gu.forEachNeighbor(curr, ni => {
+        if (count >= maxCount) return;
+        const c = this.grid[ni];
+        if (c !== ColorId.EMPTY && !(ni === pair.end && c === pair.colorId)) return;
+
+        const wasEmpty = c === ColorId.EMPTY;
+        if (wasEmpty) this.grid[ni] = pair.colorId;
+        dfs(ni);
+        if (wasEmpty) this.grid[ni] = ColorId.EMPTY;
+      });
+    };
+
+    dfs(pair.start);
     return count;
   }
 
@@ -105,64 +128,25 @@ export class UniquenessValidator {
   }
 
   private checkReachability(start: number, end: number, colorId: ColorId): boolean {
-    const visited = new Uint8Array(this.grid.length);
+    // OP-05: Reuse scratch buffer — no allocation per call
+    if (reachEpoch > 250) { reachBuf.fill(0); reachEpoch = 1; }
+    const epoch = ++reachEpoch;
+
     const queue = [start];
-    visited[start] = 1;
+    reachBuf[start] = epoch;
     let qIdx = 0;
     while (qIdx < queue.length) {
-        const curr = queue[qIdx++];
-        if (curr === end) return true;
-        this.gu.forEachNeighbor(curr, ni => {
-            if (!visited[ni] && (this.grid[ni] === ColorId.EMPTY || (ni === end && this.grid[ni] === colorId))) {
-                visited[ni] = 1;
-                queue.push(ni);
-            }
-        });
+      const curr = queue[qIdx++]; // index-based, no shift()
+      if (curr === end) return true;
+      this.gu.forEachNeighbor(curr, ni => {
+        if (reachBuf[ni] !== epoch &&
+            (this.grid[ni] === ColorId.EMPTY || (ni === end && this.grid[ni] === colorId))) {
+          reachBuf[ni] = epoch;
+          queue.push(ni);
+        }
+      });
     }
     return false;
   }
 
-  private findAllPaths(start: number, end: number, colorId: ColorId): number[][] {
-    const paths: number[][] = [];
-    const vis = new Uint8Array(this.grid.length);
-    vis[start] = 1;
-    
-    const dfs = (curr: number, path: number[]) => {
-      if (paths.length >= 100) return; // Still some limit to avoid explosion, but higher
-      if (curr === end) {
-        paths.push([...path]);
-        return;
-      }
-      this.gu.forEachNeighbor(curr, ni => {
-        if (!vis[ni] && (this.grid[ni] === ColorId.EMPTY || (ni === end && this.grid[ni] === colorId))) {
-          vis[ni] = 1;
-          path.push(ni);
-          dfs(ni, path);
-          path.pop();
-          vis[ni] = 0;
-        }
-      });
-    };
-
-    dfs(start, [start]);
-    return paths;
-  }
-
-  private applyPath(path: number[], colorId: ColorId, endIdx: number): number[] {
-    const filled: number[] = [];
-    for (let i = 1; i < path.length; i++) {
-      const idx = path[i];
-      if (idx !== endIdx && this.grid[idx] === ColorId.EMPTY) {
-        this.grid[idx] = colorId;
-        filled.push(idx);
-      }
-    }
-    return filled;
-  }
-
-  private unapplyPath(filled: number[]): void {
-    for (const idx of filled) {
-      this.grid[idx] = ColorId.EMPTY;
-    }
-  }
 }

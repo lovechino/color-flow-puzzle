@@ -19,6 +19,7 @@
 // since we can't use Phaser or browser APIs
 import { PuzzleGenerator } from './PuzzleGenerator';
 import type { GeneratorConfig } from './PuzzleGenerator';
+import type { LevelData } from '../types';
 
 // Worker message handler
 self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
@@ -96,7 +97,7 @@ async function handleGenerateBatch(requestId: string, config: GeneratorConfig & 
 
   isRunning = true;
   const startTime = performance.now();
-  const levels: any[] = [];
+  const levels: LevelData[] = [];
   let failed = 0;
 
   try {

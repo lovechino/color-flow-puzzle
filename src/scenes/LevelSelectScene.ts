@@ -80,7 +80,7 @@ export class LevelSelectScene extends Phaser.Scene {
       const level = levelModule.default || levelModule;
       
       this.scene.start('GameScene', { level });
-    } catch (err) {
+    } catch {
       console.warn(`Level ${levelId} not found, using fallback`);
       // Fallback: still start GameScene with minimal data
       const fallbackLevel = {

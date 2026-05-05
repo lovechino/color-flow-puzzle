@@ -54,7 +54,7 @@ export interface GenerationProgress {
 
 export class GeneratorWorkerBridge {
   private worker: Worker | null = null;
-  private pendingRequests = new Map<string, { resolve: Function; reject: Function; timeout: ReturnType<typeof setTimeout> }>();
+  private pendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (reason: unknown) => void; timeout: ReturnType<typeof setTimeout> }>();
   private requestCounter = 0;
 
   constructor() {

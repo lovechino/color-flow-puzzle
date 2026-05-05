@@ -1,7 +1,7 @@
-import type { Cell, DotPair } from '../../types';
+import type { Cell } from '../../types';
 
 export class ConstraintPropagator {
-  propagate(grid: Cell[][], _pairs: DotPair[]): boolean {
+  propagate(grid: Cell[][]): boolean {
     let changed = true;
     let iterations = 0;
 

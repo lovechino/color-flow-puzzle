@@ -69,24 +69,27 @@ export function renderGrid(
       container.add(bg);
 
       switch (cell.type) {
-        case 'dot':
+        case 'dot': {
           if (cell.dotColor) {
             const dot = scene.add.circle(x, y, cellSize * 0.3, Phaser.Display.Color.HexStringToColor(COLOR_HEX[cell.dotColor]).color);
             container.add(dot);
           }
           break;
+        }
 
-        case 'wall':
+        case 'wall': {
           const wall = scene.add.rectangle(x, y, cellSize - gap, cellSize - gap, 0x333333);
           container.add(wall);
           break;
+        }
 
-        case 'mixer':
+        case 'mixer': {
           const mixer = scene.add.circle(x, y, cellSize * 0.35, 0x888888);
           container.add(mixer);
           break;
+        }
 
-        case 'teleport':
+        case 'teleport': {
           const tp = scene.add.circle(x, y, cellSize * 0.3, 0x9b59b6);
           container.add(tp);
           const tpLabel = scene.add.text(x, y, cell.teleportId ?? '?', {
@@ -96,8 +99,9 @@ export function renderGrid(
           }).setOrigin(0.5);
           container.add(tpLabel);
           break;
+        }
 
-        case 'lock':
+        case 'lock': {
           const lock = scene.add.rectangle(x, y, cellSize - gap, cellSize - gap, 0x555555);
           container.add(lock);
           const lockIcon = scene.add.text(x, y, '🔒', {
@@ -105,6 +109,7 @@ export function renderGrid(
           }).setOrigin(0.5);
           container.add(lockIcon);
           break;
+        }
       }
     }
   }

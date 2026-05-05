@@ -3,6 +3,7 @@ import type { Cell, Color, GamePath } from '../types';
 export function canExtendPath(
   currentPath: GamePath,
   nextCell: Cell,
+  grid: Cell[][],
 ): boolean {
   if (!nextCell.isActive) return false;
   if (nextCell.type === 'wall') return false;
@@ -11,7 +12,14 @@ export function canExtendPath(
   const [headRow, headCol] = currentPath.cells[currentPath.cells.length - 1];
   const [nr, nc] = [nextCell.row, nextCell.col];
 
-  if (Math.abs(nr - headRow) + Math.abs(nc - headCol) !== 1) {
+  // Teleport handling: if head is on a teleport, use teleport target as reference
+  let referenceRow = headRow, referenceCol = headCol;
+  const headCell = grid[headRow][headCol];
+  if (headCell.type === 'teleport' && headCell.teleportTarget) {
+    [referenceRow, referenceCol] = headCell.teleportTarget;
+  }
+
+  if (Math.abs(nr - referenceRow) + Math.abs(nc - referenceCol) !== 1) {
     return false;
   }
 
@@ -30,6 +38,23 @@ export function addCellToPath(
   cell: Cell,
   grid: Cell[][],
 ): void {
+  // Teleport handling: add both entry and exit cells
+  if (cell.type === 'teleport' && cell.teleportTarget) {
+    // Add entry teleport
+    path.cells.push([cell.row, cell.col]);
+    grid[cell.row][cell.col].isFilled = true;
+    grid[cell.row][cell.col].pathColor = path.color;
+
+    // Add exit teleport
+    const [tr, tc] = cell.teleportTarget;
+    if (!path.cells.some(([r, c]) => r === tr && c === tc)) {
+      path.cells.push([tr, tc]);
+      grid[tr][tc].isFilled = true;
+      grid[tr][tc].pathColor = path.color;
+    }
+    return;
+  }
+
   path.cells.push([cell.row, cell.col]);
   grid[cell.row][cell.col].isFilled = true;
   grid[cell.row][cell.col].pathColor = path.color;
@@ -43,8 +68,25 @@ export function shrinkPath(
 
   const removed = path.cells.pop()!;
   const [r, c] = removed;
+  const cell = grid[r][c];
 
-  if (grid[r][c].type !== 'dot') {
+  // Teleport handling: if removing a teleport, also remove its pair
+  if (cell.type === 'teleport' && cell.teleportTarget) {
+    const [tr, tc] = cell.teleportTarget;
+    const prevIdx = path.cells.length - 1;
+    if (prevIdx >= 0) {
+      const [pr, pc] = path.cells[prevIdx];
+      if (pr === tr && pc === tc) {
+        path.cells.pop();
+        if (grid[pr][pc].type !== 'dot') {
+          grid[pr][pc].isFilled = false;
+          grid[pr][pc].pathColor = undefined;
+        }
+      }
+    }
+  }
+
+  if (cell.type !== 'dot') {
     grid[r][c].isFilled = false;
     grid[r][c].pathColor = undefined;
   }

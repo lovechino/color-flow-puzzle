@@ -125,7 +125,7 @@ export class MechanicsPlacer {
   private getWallConfig(target: number, current: number, size: number) {
     return {
       needed: Math.max(1, Math.ceil((target - current) / 3)),
-      max: Math.floor(size * size * 0.08),
+      max: Math.floor(size * size * 0.15),
     };
   }
 
@@ -147,8 +147,10 @@ export class MechanicsPlacer {
     const visited = new Set<string>();
     const queue: [number, number][] = [[sr, sc]];
     visited.add(startKey);
-    while (queue.length > 0) {
-      const [r, c] = queue.shift()!;
+    // OP-07: index-based dequeue — O(1) per step vs O(n) for queue.shift()
+    let head = 0;
+    while (head < queue.length) {
+      const [r, c] = queue[head++];
       for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const nr = r + dr, nc = c + dc;
         if (nr < 0 || nc < 0 || nr >= size || nc >= size) continue;

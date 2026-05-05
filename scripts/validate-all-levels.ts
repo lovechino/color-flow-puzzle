@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { UniquenessValidator } from '../src/generator/steps/ValidateUnique';
+import { BacktrackingSolver } from '../src/generator/steps/BuildSolution';
 
 const LEVELS_DIR = join(process.cwd(), 'src', 'levels');
 
@@ -15,8 +15,8 @@ function validateLevel(filePath: string): { valid: boolean; reason?: string } {
     }
     
     // Check solution count
-    const validator = new UniquenessValidator();
-    const solutionCount = validator.countSolutions(level, 2);
+    const solver = new BacktrackingSolver();
+    const solutionCount = solver.countSolutions(level, 2);
     if (solutionCount !== 1) {
       return { valid: false, reason: `Invalid solution count: ${solutionCount}` };
     }

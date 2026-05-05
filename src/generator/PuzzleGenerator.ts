@@ -2,7 +2,7 @@ import type { LevelData, Mechanic } from '../types';
 import { SeededRandom } from './SeededRandom';
 import { placeDots } from './steps/PlaceDots';
 import { BacktrackingSolver } from './steps/BuildSolution';
-import { UniquenessValidator } from './steps/ValidateUnique';
+
 import { ConstraintPropagator } from './steps/ConstraintPropagator';
 import { MechanicsPlacer } from './steps/PlaceMechanics';
 import { DifficultyScorer } from './DifficultyScorer';
@@ -53,7 +53,7 @@ function mutateLevelInternal(seed: LevelData, rng: SeededRandom): LevelData | nu
 
     if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
       const occupied = new Set<string>();
-      pairs.forEach((p, idx) => {
+      pairs.forEach((p) => {
         occupied.add(`${p.start[0]},${p.start[1]}`);
         occupied.add(`${p.end[0]},${p.end[1]}`);
       });
@@ -78,8 +78,26 @@ function mutateLevelInternal(seed: LevelData, rng: SeededRandom): LevelData | nu
     pairs[i].end = tmp;
   }
 
-  // Try to solve
-  const solution = solver.solve(gridSize, pairs, []);
+  // Validate mutated pairs
+  const occupied = new Set<string>();
+  for (const p of pairs) {
+    const startKey = `${p.start[0]},${p.start[1]}`;
+    const endKey = `${p.end[0]},${p.end[1]}`;
+
+    // Check bounds
+    if (p.start[0] < 0 || p.start[0] >= gridSize || p.start[1] < 0 || p.start[1] >= gridSize) return null;
+    if (p.end[0] < 0 || p.end[0] >= gridSize || p.end[1] < 0 || p.end[1] >= gridSize) return null;
+
+    // Check overlaps
+    if (occupied.has(startKey)) return null;
+    if (occupied.has(endKey)) return null;
+    occupied.add(startKey);
+    occupied.add(endKey);
+  }
+
+  // Try to solve (with timeout)
+  const solveTimeout = gridSize <= 7 ? 3000 : gridSize <= 9 ? 5000 : 10000;
+  const solution = solver.solve(gridSize, pairs, seed.walls || [], solveTimeout);
   if (!solution) return null;
 
   return {
@@ -110,7 +128,6 @@ export interface GeneratorResult {
 
 export class PuzzleGenerator {
   private solver = new BacktrackingSolver();
-  private validator = new UniquenessValidator();
   private propagator = new ConstraintPropagator();
   private mechanicsPlacer = new MechanicsPlacer();
   private scorer = new DifficultyScorer();
@@ -144,8 +161,9 @@ export class PuzzleGenerator {
         continue;
       }
 
-      // Step 2: Solve
-      const solution = this.solver.solve(gridSize, pairs, []);
+      // Step 2: Solve (with timeout based on grid size)
+      const solveTimeout = gridSize <= 7 ? 3000 : gridSize <= 9 ? 5000 : 10000;
+      const solution = this.solver.solve(gridSize, pairs, [], solveTimeout);
       if (!solution) {
         continue;
       }
@@ -173,7 +191,8 @@ export class PuzzleGenerator {
       };
 
       // Step 4: Validate uniqueness
-      const solutionCount = this.validator.countSolutions(levelData, 2);
+      const solutionCount = this.solver.countSolutions(levelData, 2);
+      console.log(`Attempt ${attempt}: solutionCount = ${solutionCount}`);
 
       if (solutionCount !== 1) {
         continue;
@@ -200,7 +219,7 @@ export class PuzzleGenerator {
       
       populateGridFromLevel(grid, fullLevel);
 
-      if (!this.propagator.propagate(grid, pairs)) {
+      if (!this.propagator.propagate(grid)) {
         continue;
       }
 
@@ -235,26 +254,46 @@ export class PuzzleGenerator {
   }
 
   // Mutate an existing level to create a new one
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   static mutate(seed: LevelData, mutationCount: number, difficultyTarget: number): LevelData | null {
     // Strict validation of seed
     if (!seed || !Array.isArray(seed.pairs) || seed.pairs.length === 0) {
       return null;
     }
-    if (!Array.isArray(seed.solution) || seed.solution.length === 0) {
-      return null;
-    }
 
-    const maxRetries = 100;
+    const maxRetries = 500;
     const rng = new SeededRandom(`mutate_${seed.id}_${mutationCount}_${Date.now()}`);
     const scorer = new DifficultyScorer();
-    const validator = new UniquenessValidator();
+    const solver = new BacktrackingSolver();
+    const mechanicsPlacer = new MechanicsPlacer();
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const mutated = mutateLevelInternal(seed, rng);
       if (!mutated) continue;
 
+      // Step 3: Place mechanics
+      const mechanicsResult = mechanicsPlacer.place({
+        gridSize: mutated.gridSize,
+        solution: mutated.solution.map(s => ({ color: s.color, path: s.path })),
+        pairs: mutated.pairs as { color: Color; start: [number, number]; end: [number, number] }[],
+        allowedMechanics: ['wall'],
+        difficultyTarget: difficultyTarget,
+        rng: rng,
+      });
+
+      mutated.walls = mechanicsResult.walls;
+      mutated.mixers = mechanicsResult.mixers;
+      mutated.teleports = mechanicsResult.teleports;
+      mutated.locks = mechanicsResult.locks;
+      mutated.shapeMask = mechanicsResult.shapeMask;
+      mutated.mechanics = ['wall'];
+
       // Validate uniqueness
-      if (validator.countSolutions(mutated, 2) !== 1) continue;
+      const count = solver.countSolutions(mutated, 2);
+      if (count !== 1) {
+        if (attempt % 50 === 0) console.log(`  - Attempt ${attempt}: solutionCount = ${count}`);
+        continue;
+      }
 
       // Score difficulty
       const score = scorer.score(mutated);

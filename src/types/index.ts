@@ -3,7 +3,7 @@ export type Color =
   | 'cyan' | 'pink' | 'brown' | 'white' | 'lime' | 'magenta'
   | 'teal' | 'gold' | 'navy';
 
-export const enum ColorId {
+export enum ColorId {
   EMPTY = 0,
   RED = 1,
   BLUE = 2,

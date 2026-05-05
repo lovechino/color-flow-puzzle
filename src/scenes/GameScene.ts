@@ -43,6 +43,7 @@ export class GameScene extends Phaser.Scene {
     this.gridContainer.setSize(gridPixelSize, gridPixelSize);
 
     renderGrid(this, this.grid, this.gridContainer);
+    this.drawTeleportConnections();
 
     this.pathGraphics = this.add.graphics();
     this.pathGraphics.setDepth(10);
@@ -101,7 +102,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (!canExtendPath(this.activePath, cell)) return;
+    if (!canExtendPath(this.activePath, cell, this.grid)) return;
 
     addCellToPath(this.activePath, cell, this.grid);
 
@@ -138,13 +139,54 @@ export class GameScene extends Phaser.Scene {
       for (let i = 0; i < path.cells.length - 1; i++) {
         const [r1, c1] = path.cells[i];
         const [r2, c2] = path.cells[i + 1];
-
         const x1 = this.gridContainer.x - this.gridContainer.width / 2 + c1 * this.cellSize + this.cellSize / 2;
         const y1 = this.gridContainer.y - this.gridContainer.height / 2 + r1 * this.cellSize + this.cellSize / 2;
         const x2 = this.gridContainer.x - this.gridContainer.width / 2 + c2 * this.cellSize + this.cellSize / 2;
         const y2 = this.gridContainer.y - this.gridContainer.height / 2 + r2 * this.cellSize + this.cellSize / 2;
-
         this.pathGraphics.lineBetween(x1, y1, x2, y2);
+      }
+    }
+  }
+
+  private drawTeleportConnections(): void {
+    if (!this.level.teleports || this.level.teleports.length === 0) return;
+
+    const graphics = this.add.graphics();
+    graphics.setDepth(5);
+
+    const groups = new Map<string, { pos: [number, number]; target: [number, number] }>();
+    for (const tp of this.level.teleports) {
+      if (tp.teleportTarget) {
+        groups.set(tp.id, { pos: tp.pos, target: tp.teleportTarget });
+      }
+    }
+
+    for (const [, { pos, target }] of groups) {
+      const x1 = this.gridContainer.x - this.gridContainer.width / 2 + pos[1] * this.cellSize + this.cellSize / 2;
+      const y1 = this.gridContainer.y - this.gridContainer.height / 2 + pos[0] * this.cellSize + this.cellSize / 2;
+      const x2 = this.gridContainer.x - this.gridContainer.width / 2 + target[1] * this.cellSize + this.cellSize / 2;
+      const y2 = this.gridContainer.y - this.gridContainer.height / 2 + target[0] * this.cellSize + this.cellSize / 2;
+
+      graphics.lineStyle(2, 0xffffff, 0.4);
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const dashLen = 8, gapLen = 5;
+      let drawn = 0;
+      let isDash = true;
+      let cx = x1, cy = y1;
+
+      while (drawn < len) {
+        const segment = Math.min(isDash ? dashLen : gapLen, len - drawn);
+        const nx = cx + (dx / len) * segment;
+        const ny = cy + (dy / len) * segment;
+
+        if (isDash) {
+          graphics.lineBetween(cx, cy, nx, ny);
+        }
+
+        cx = nx; cy = ny;
+        drawn += segment;
+        isDash = !isDash;
       }
     }
   }

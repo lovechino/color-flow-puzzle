@@ -23,9 +23,20 @@ export function placeDots(
   const pairs: DotPair[] = [];
   const occupied = new Set<string>();
 
+  // OP-06: Compute available cells ONCE — remove used cells incrementally
+  // instead of calling getAvailable() on every one of 200 attempts per color
+  let available = getAvailable(size, occupied, config.avoidCorners);
+
   for (let colorIdx = 0; colorIdx < numColors; colorIdx++) {
-    const pair = tryPlacePair(size, colorIdx, rng, config, occupied, pairs);
+    const pair = tryPlacePair(size, colorIdx, rng, config, available, pairs);
     if (!pair) return null;
+
+    // Remove the 2 used cells from available for next iteration
+    const sk = `${pair.start[0]},${pair.start[1]}`;
+    const ek = `${pair.end[0]},${pair.end[1]}`;
+    available = available.filter(([r, c]) => `${r},${c}` !== sk && `${r},${c}` !== ek);
+    occupied.add(sk);
+    occupied.add(ek);
     pairs.push(pair);
   }
 
@@ -36,12 +47,12 @@ function tryPlacePair(
   size: number,
   colorIdx: number,
   rng: SeededRandom,
-  config: any,
-  occupied: Set<string>,
+  config: { minDist: number; minSpread: number; avoidCorners: boolean; },
+  // OP-06: receives the pre-computed (and incrementally updated) available list
+  available: [number, number][],
   pairs: DotPair[],
 ): DotPair | null {
   for (let attempts = 0; attempts < 200; attempts++) {
-    const available = getAvailable(size, occupied, config.avoidCorners);
     if (available.length < 2) return null;
 
     const startIdx = rng.nextInt(available.length);
@@ -50,8 +61,6 @@ function tryPlacePair(
     if (!end) continue;
 
     if (isSpreadValid(start, end, pairs, config.minSpread)) {
-      occupied.add(`${start[0]},${start[1]}`);
-      occupied.add(`${end[0]},${end[1]}`);
       return { color: COLORS[colorIdx], start, end };
     }
   }

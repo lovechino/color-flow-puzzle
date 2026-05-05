@@ -1,0 +1,23 @@
+{
+  "id": "g06_seed_001",
+  "gridSize": 6,
+  "globalIndex": 0,
+  "pairs": [
+    { "color": "red", "start": [0, 0], "end": [5, 0] },
+    { "color": "blue", "start": [0, 1], "end": [5, 1] },
+    { "color": "green", "start": [0, 2], "end": [5, 2] },
+    { "color": "yellow", "start": [0, 3], "end": [5, 3] },
+    { "color": "orange", "start": [0, 4], "end": [5, 4] },
+    { "color": "purple", "start": [0, 5], "end": [5, 5] }
+  ],
+  "walls": [],
+  "mixers": [],
+  "teleports": [],
+  "locks": [],
+  "solution": [],
+  "difficultyScore": 0,
+  "difficultyLabel": "trivial",
+  "par": 0,
+  "estimatedSolveTime": 0,
+  "mechanics": []
+}

@@ -12,7 +12,6 @@
 
 import { PuzzleGenerator } from '../src/generator/PuzzleGenerator';
 import { DifficultyScorer } from '../src/generator/DifficultyScorer';
-import { UniquenessValidator } from '../src/generator/steps/ValidateUnique';
 import type { LevelData, Mechanic } from '../src/types';
 import { LEVEL_COUNTS_BY_GRID } from '../src/config';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'fs';
@@ -100,14 +99,32 @@ function getTargetDifficultyRange(gridSize: number): [number, number] {
 async function generateByMutation(gridSize: number, levelCount: number, state: GenerationState): Promise<void> {
   const gridDir = join(OUTPUT_DIR, `grid_${String(gridSize).padStart(2, '0')}`);
   if (!existsSync(gridDir)) mkdirSync(gridDir, { recursive: true });
-
+ 
   // Load seed
-  const seedLevel = loadSeedForGrid(gridSize);
+  let seedLevel = loadSeedForGrid(gridSize);
   if (!seedLevel) {
-    console.log(`  ❌ No seed file for ${gridSize}×${gridSize}. Create src/seeds/g${String(gridSize).padStart(2,'0')}_seed_001.json first.`);
-    state.grids[gridSize].status = 'failed';
-    saveState(state);
-    return;
+    console.log(`  ❌ No seed file for ${gridSize}×${gridSize}. Creating one...`);
+    const generator = new PuzzleGenerator();
+    const numColors = gridSize >= 10 ? 10 : gridSize >= 9 ? 9 : gridSize >= 8 ? 8 : gridSize >= 7 ? 6 : Math.min(6, Math.floor(gridSize * 0.75));
+    const newSeed = generator.generateWithFallback({
+      gridSize,
+      numColors,
+      targetDifficulty: 30,
+      mechanics: ['wall'],
+      seed: `auto_seed_${gridSize}`
+    }).level;
+    if (newSeed) {
+      newSeed.id = `g${String(gridSize).padStart(2, '0')}_seed_001`;
+      newSeed.globalIndex = 0;
+      writeFileSync(join(SEEDS_DIR, `g${String(gridSize).padStart(2, '0')}_seed_001.json`), JSON.stringify(newSeed, null, 2));
+      console.log(`  ✅ Created seed: ${newSeed.id}`);
+      seedLevel = newSeed;
+    } else {
+      console.log(`  ❌ Failed to create seed`);
+      state.grids[gridSize].status = 'failed';
+      saveState(state);
+      return;
+    }
   }
   console.log(`  ✅ Loaded seed: ${seedLevel.id}`);
 
@@ -127,32 +144,45 @@ async function generateByMutation(gridSize: number, levelCount: number, state: G
 
   console.log(`  🔄 Resuming: ${generated}/${levelCount} done, need ${levelCount - generated} more`);
 
-  // Seed pool grows as we generate
   const pool: LevelData[] = [seedLevel];
-  const validator = new UniquenessValidator();
   const scorer = new DifficultyScorer();
   const [minDiff, maxDiff] = getTargetDifficultyRange(gridSize);
+
+  // Use generateWithFallback for grid 10x10+ (faster, has timeout)
+  const useGenerate = gridSize >= 11;
+  const generator = useGenerate ? new PuzzleGenerator() : null;
 
   while (generated < levelCount) {
     const nextIndex = generated + 1;
     const targetDifficulty = minDiff + Math.floor((nextIndex / levelCount) * (maxDiff - minDiff));
 
-    // Pick random seed from pool
-    const seed = pool[Math.floor(Math.random() * pool.length)];
-
-    process.stdout.write(`\r  [${nextIndex}/${levelCount}] Mutating from ${seed.id}... `);
+    process.stdout.write(`\r  [${nextIndex}/${levelCount}] ${useGenerate ? 'Generating' : 'Mutating'}... `);
     const mutStart = Date.now();
 
-    const mutated = PuzzleGenerator.mutate(seed, nextIndex, targetDifficulty);
+    let mutated: LevelData | null = null;
 
-    if (!mutated) {
-      console.log(`❌ Mutation failed (${((Date.now() - mutStart) / 1000).toFixed(1)}s)`);
-      continue;
+    if (useGenerate && generator) {
+      const result = generator.generateWithFallback({
+        gridSize,
+        numColors: gridSize >= 10 ? 10 : gridSize >= 9 ? 9 : gridSize >= 8 ? 8 : Math.min(6, Math.floor(gridSize * 0.75)),
+        targetDifficulty,
+        mechanics: [],
+        seed: `g${String(gridSize).padStart(2, '0')}_${nextIndex}`
+      });
+      mutated = result.level;
+      if (!mutated) {
+        console.log(`❌ ${result.status} (${(result.timeMs / 1000).toFixed(1)}s, ${result.attempts} attempts)`);
+        continue;
+      }
+    } else {
+      // Pick random seed from pool
+      const seed = pool[Math.floor(Math.random() * pool.length)];
+      process.stdout.write(`from ${seed.id}... `);
+      mutated = PuzzleGenerator.mutate(seed, nextIndex, targetDifficulty);
     }
 
-    // Uniqueness check
-    if (validator.countSolutions(mutated, 2) !== 1) {
-      console.log(`❌ Not unique (${((Date.now() - mutStart) / 1000).toFixed(1)}s)`);
+    if (!mutated) {
+      console.log(`❌ Failed (${((Date.now() - mutStart) / 1000).toFixed(1)}s)`);
       continue;
     }
 
@@ -189,12 +219,15 @@ async function generateByMutation(gridSize: number, levelCount: number, state: G
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-function parseArgs(): { grids?: number[] } {
+function parseArgs(): { grids?: number[], count?: number } {
   const args = process.argv.slice(2);
-  const result: { grids?: number[] } = {};
+  const result: { grids?: number[], count?: number } = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--grid' && args[i + 1]) {
       result.grids = [parseInt(args[i + 1], 10)];
+      i++;
+    } else if (args[i] === '--count' && args[i + 1]) {
+      result.count = parseInt(args[i + 1], 10);
       i++;
     }
   }
@@ -226,7 +259,8 @@ async function main(): Promise<void> {
       console.warn(`⚠️  No level count for ${gridSize}×${gridSize}, skipping`);
       continue;
     }
-    await generateByMutation(gridSize, LEVEL_COUNTS_BY_GRID[gridSize], state);
+    const count = options.count || LEVEL_COUNTS_BY_GRID[gridSize];
+    await generateByMutation(gridSize, count, state);
   }
 
   console.log('\n🎉 All grids complete!\n');
