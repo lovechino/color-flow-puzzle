@@ -1,6 +1,6 @@
 {
   "startedAt": "2026-05-05T00:59:31.790Z",
-  "lastUpdatedAt": "2026-05-05T08:14:27.328Z",
+  "lastUpdatedAt": "2026-05-05T09:14:08.121Z",
   "grids": {
     "3": {
       "target": 3,
@@ -39,8 +39,8 @@
     },
     "10": {
       "target": 70,
-      "completed": 0,
-      "status": "in_progress"
+      "completed": 70,
+      "status": "completed"
     },
     "11": {
       "target": 88,

@@ -105,7 +105,7 @@ async function generateByMutation(gridSize: number, levelCount: number, state: G
   if (!seedLevel) {
     console.log(`  ❌ No seed file for ${gridSize}×${gridSize}. Creating one...`);
     const generator = new PuzzleGenerator();
-    const numColors = gridSize >= 10 ? 10 : gridSize >= 9 ? 9 : gridSize >= 8 ? 8 : gridSize >= 7 ? 6 : Math.min(6, Math.floor(gridSize * 0.75));
+    const numColors = gridSize >= 7 ? Math.min(gridSize, 15) : Math.min(6, Math.floor(gridSize * 0.75));
     const newSeed = generator.generateWithFallback({
       gridSize,
       numColors,
@@ -148,8 +148,8 @@ async function generateByMutation(gridSize: number, levelCount: number, state: G
   const scorer = new DifficultyScorer();
   const [minDiff, maxDiff] = getTargetDifficultyRange(gridSize);
 
-  // Use generateWithFallback for grid 10x10+ (faster, has timeout)
-  const useGenerate = gridSize >= 11;
+  // Use generateWithFallback only for grid 21+ (mutation is more stable for 7-20)
+  const useGenerate = gridSize >= 21;
   const generator = useGenerate ? new PuzzleGenerator() : null;
 
   while (generated < levelCount) {
@@ -164,7 +164,7 @@ async function generateByMutation(gridSize: number, levelCount: number, state: G
     if (useGenerate && generator) {
       const result = generator.generateWithFallback({
         gridSize,
-        numColors: gridSize >= 10 ? 10 : gridSize >= 9 ? 9 : gridSize >= 8 ? 8 : Math.min(6, Math.floor(gridSize * 0.75)),
+        numColors: Math.min(gridSize, 15),
         targetDifficulty,
         mechanics: [],
         seed: `g${String(gridSize).padStart(2, '0')}_${nextIndex}`

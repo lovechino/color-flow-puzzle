@@ -67,38 +67,20 @@
         5,
         6
       ]
+    },
+    {
+      "color": "cyan",
+      "start": [
+        6,
+        0
+      ],
+      "end": [
+        6,
+        6
+      ]
     }
   ],
-  "walls": [
-    [
-      6,
-      0
-    ],
-    [
-      6,
-      1
-    ],
-    [
-      6,
-      2
-    ],
-    [
-      6,
-      3
-    ],
-    [
-      6,
-      4
-    ],
-    [
-      6,
-      5
-    ],
-    [
-      6,
-      6
-    ]
-  ],
+  "walls": [],
   "mixers": [],
   "teleports": [],
   "locks": [],
@@ -300,11 +282,44 @@
           6
         ]
       ]
+    },
+    {
+      "color": "cyan",
+      "path": [
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ]
+      ]
     }
   ],
   "difficultyScore": 0,
   "difficultyLabel": "trivial",
-  "par": 42,
+  "par": 49,
   "estimatedSolveTime": 0,
   "mechanics": [
     "wall"
